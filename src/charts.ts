@@ -28,95 +28,6 @@ function hasSignal(values: (number | null)[]): boolean {
   return set.size >= 2;
 }
 
-export function buildSegmentFigure(segment: Segment): Figure | null {
-  const { records } = segment;
-  if (records.length === 0) return null;
-  const isRun = segment.sport === 'running';
-  const x = records.map((r) => r.timestamp);
-
-  const rows: { values: (number | null)[]; title: string; color: string; reversed?: boolean; text?: string[] }[] = [];
-
-  const hr = pick(records, 'heart_rate');
-  if (hasSignal(hr)) rows.push({ values: hr, title: 'Heart Rate (bpm)', color: '#ef4444' });
-
-  const power = pick(records, 'power');
-  if (hasSignal(power)) rows.push({ values: rolling30s(power), title: 'Power 30s Avg (W)', color: '#3b82f6' });
-
-  const cadence = pick(records, 'cadence');
-  if (hasSignal(cadence)) {
-    rows.push({
-      values: isRun ? cadence.map((v) => (v != null ? v * 2 : null)) : cadence,
-      title: isRun ? 'Cadence (spm)' : 'Cadence (rpm)',
-      color: '#10b981',
-    });
-  }
-
-  const speedRaw = records.map((r) => {
-    const v = r.enhanced_speed ?? r.speed;
-    return typeof v === 'number' && !Number.isNaN(v) ? v : null;
-  });
-  if (hasSignal(speedRaw)) {
-    if (isRun) {
-      const pace = speedRaw.map((v) => (v != null && v >= 3.0 && v <= 25.0 ? 60 / v : null));
-      rows.push({
-        values: pace,
-        title: 'Pace (min/km)',
-        color: '#f59e0b',
-        reversed: true,
-        text: speedRaw.map((v) => paceStr(v ?? undefined)),
-      });
-    } else {
-      rows.push({ values: speedRaw, title: 'Speed (km/h)', color: '#f59e0b' });
-    }
-  }
-
-  const alt = records.map((r) => {
-    const v = r.enhanced_altitude ?? r.altitude;
-    return typeof v === 'number' && !Number.isNaN(v) ? v : null;
-  });
-  if (hasSignal(alt)) rows.push({ values: alt, title: 'Altitude (m)', color: '#a78bfa' });
-
-  if (rows.length === 0) return null;
-
-  const n = rows.length;
-  const data = rows.map((row, i) => ({
-    x,
-    y: row.values,
-    name: row.title,
-    type: 'scatter',
-    mode: 'lines',
-    line: { color: row.color, width: 1.5 },
-    yaxis: i === 0 ? 'y' : `y${i + 1}`,
-    text: row.text,
-    hovertemplate: row.text ? `${row.title}: %{text} /km<extra></extra>` : `${row.title}: %{y:.1f}<extra></extra>`,
-  }));
-
-  const layout: any = {
-    height: 170 * n + 60,
-    margin: { l: 60, r: 30, t: 30, b: 30 },
-    showlegend: false,
-    paper_bgcolor: PAPER,
-    plot_bgcolor: PAPER,
-    font: { color: '#94a3b8' },
-    hovermode: 'x unified',
-    xaxis: { gridcolor: GRID, anchor: n === 1 ? 'y' : `y${n}` },
-  };
-  const domainH = 1 / n;
-  rows.forEach((row, i) => {
-    const top = 1 - i * domainH;
-    const bottom = top - domainH + 0.05;
-    layout[i === 0 ? 'yaxis' : `yaxis${i + 1}`] = {
-      title: { text: row.title, font: { size: 11, color: row.color } },
-      domain: [Math.max(0, bottom), top],
-      gridcolor: GRID,
-      color: row.color,
-      ...(row.reversed ? { autorange: 'reversed' } : {}),
-    };
-  });
-
-  return { data, layout };
-}
-
 export function buildMapFigure(segments: Segment[]): Figure | null {
   const traces: any[] = [];
   let allLats: number[] = [];
@@ -473,6 +384,166 @@ export function buildLengthsFigure(lengths: FitLength[]): Figure | null {
       domain: [Math.max(0, bottom), top],
       gridcolor: GRID,
     };
+  });
+
+  return { data, layout };
+}
+
+// ---- Overlay segment chart (checkbox-selected metrics on one plot) ----
+
+export interface Metric {
+  key: string;
+  title: string;
+  unit: string;
+  color: string;
+  values: (number | null)[];
+  reversed?: boolean;
+  text?: string[];
+}
+
+export function extractSegmentMetrics(segment: Segment): { x: Date[]; metrics: Metric[] } {
+  const { records } = segment;
+  const isRun = segment.sport === 'running';
+  const x = records.map((r) => r.timestamp);
+  const metrics: Metric[] = [];
+
+  const hr = pick(records, 'heart_rate');
+  if (hasSignal(hr))
+    metrics.push({ key: 'hr', title: 'Heart Rate', unit: 'bpm', color: '#ef4444', values: hr });
+
+  const power = pick(records, 'power');
+  if (hasSignal(power))
+    metrics.push({
+      key: 'power',
+      title: 'Power 30s Avg',
+      unit: 'W',
+      color: '#3b82f6',
+      values: rolling30s(power),
+    });
+
+  const cadence = pick(records, 'cadence');
+  if (hasSignal(cadence))
+    metrics.push({
+      key: 'cadence',
+      title: 'Cadence',
+      unit: isRun ? 'spm' : 'rpm',
+      color: '#10b981',
+      values: isRun ? cadence.map((v) => (v != null ? v * 2 : null)) : cadence,
+    });
+
+  const speedRaw = records.map((r) => {
+    const v = r.enhanced_speed ?? r.speed;
+    return typeof v === 'number' && !Number.isNaN(v) ? v : null;
+  });
+  if (hasSignal(speedRaw)) {
+    if (isRun) {
+      metrics.push({
+        key: 'pace',
+        title: 'Pace',
+        unit: 'min/km',
+        color: '#f59e0b',
+        values: speedRaw.map((v) => (v != null && v >= 3.0 && v <= 25.0 ? 60 / v : null)),
+        reversed: true,
+        text: speedRaw.map((v) => paceStr(v ?? undefined)),
+      });
+    } else {
+      metrics.push({
+        key: 'speed',
+        title: 'Speed',
+        unit: 'km/h',
+        color: '#f59e0b',
+        values: speedRaw,
+      });
+    }
+  }
+
+  const alt = records.map((r) => {
+    const v = r.enhanced_altitude ?? r.altitude;
+    return typeof v === 'number' && !Number.isNaN(v) ? v : null;
+  });
+  if (hasSignal(alt))
+    metrics.push({ key: 'alt', title: 'Altitude', unit: 'm', color: '#a78bfa', values: alt });
+
+  return { x, metrics };
+}
+
+/**
+ * One plot, one y-axis per selected metric. Axes alternate left/right;
+ * beyond two they are stacked outward with free positioning.
+ */
+export function buildOverlayFigure(x: Date[], metrics: Metric[]): Figure | null {
+  if (metrics.length === 0) return null;
+
+  const n = metrics.length;
+  const sides = metrics.map((_, i) => (i % 2 === 0 ? 'left' : 'right') as 'left' | 'right');
+  const leftCount = sides.filter((s) => s === 'left').length;
+  const rightCount = n - leftCount;
+  const OFFSET = 0.07;
+
+  const xDomain: [number, number] = [
+    Math.max(0, (leftCount - 1) * OFFSET),
+    Math.min(1, 1 - (rightCount - 1) * OFFSET),
+  ];
+
+  const data = metrics.map((m, i) => ({
+    x,
+    y: m.values,
+    name: `${m.title} (${m.unit})`,
+    type: 'scatter',
+    mode: 'lines',
+    line: { color: m.color, width: 1.4 },
+    yaxis: i === 0 ? 'y' : `y${i + 1}`,
+    text: m.text,
+    hovertemplate: m.text
+      ? `${m.title}: %{text} /km<extra></extra>`
+      : `${m.title}: %{y:.1f} ${m.unit}<extra></extra>`,
+  }));
+
+  const layout: any = {
+    height: 460,
+    margin: { l: 55, r: 55, t: 40, b: 40 },
+    showlegend: true,
+    legend: { orientation: 'h', y: 1.12, font: { size: 11 } },
+    paper_bgcolor: PAPER,
+    plot_bgcolor: PAPER,
+    font: { color: '#94a3b8' },
+    hovermode: 'x unified',
+    xaxis: { gridcolor: GRID, domain: xDomain },
+  };
+
+  let leftSeen = 0;
+  let rightSeen = 0;
+  metrics.forEach((m, i) => {
+    const side = sides[i];
+    // Innermost axis sits at the plot edge; later same-side axes step outward.
+    const position =
+      side === 'left'
+        ? xDomain[0] - leftSeen * OFFSET
+        : xDomain[1] + rightSeen * OFFSET;
+    if (side === 'left') leftSeen++;
+    else rightSeen++;
+
+    const axis: any = {
+      title: { text: m.unit, font: { size: 10, color: m.color } },
+      color: m.color,
+      side,
+      showgrid: i === 0,
+      gridcolor: GRID,
+      zeroline: false,
+      ...(m.reversed ? { autorange: 'reversed' } : {}),
+    };
+    if (i === 0) {
+      axis.anchor = 'x';
+    } else {
+      axis.overlaying = 'y';
+      if (i <= 1) {
+        axis.anchor = 'x';
+      } else {
+        axis.anchor = 'free';
+        axis.position = Math.min(1, Math.max(0, position));
+      }
+    }
+    layout[i === 0 ? 'yaxis' : `yaxis${i + 1}`] = axis;
   });
 
   return { data, layout };
