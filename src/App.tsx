@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ParsedFit } from './fit';
 import { fmtDuration, parseFitFile } from './fit';
-import { buildMapFigure, buildSegmentFigure } from './charts';
+import { buildMapFigure } from './charts';
 import Plot from './Plot';
+import SegmentChart from './SegmentChart';
 import BikeDetails from './BikeDetails';
 import SwimDetails from './SwimDetails';
 import './App.css';
@@ -37,13 +38,6 @@ export default function App() {
   );
 
   const mapFigure = useMemo(() => (parsed ? buildMapFigure(parsed.segments) : null), [parsed]);
-  const segmentFigures = useMemo(
-    () =>
-      parsed
-        ? parsed.segments.map((seg) => ({ label: seg.label, figure: buildSegmentFigure(seg) }))
-        : [],
-    [parsed],
-  );
 
   return (
     <div className="container">
@@ -155,15 +149,9 @@ export default function App() {
             <p className="status">GPSデータが見つからないため地図描画はスキップしました。</p>
           )}
 
-          {segmentFigures.map(
-            ({ label, figure }) =>
-              figure && (
-                <div className="card" key={label}>
-                  <h3>{label} セグメント</h3>
-                  <Plot figure={figure} />
-                </div>
-              ),
-          )}
+          {parsed.segments.map((seg) => (
+            <SegmentChart segment={seg} key={seg.label} />
+          ))}
 
           {(() => {
             const swim = parsed.segments.find((s) => s.sport === 'swimming');

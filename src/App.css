@@ -162,3 +162,38 @@ td {
   font-weight: 400;
   color: #94a3b8;
 }
+
+.metric-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 4px 12px;
+}
+
+.metric-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #475569;
+  border-radius: 9999px;
+  padding: 5px 14px;
+  font-size: 0.82rem;
+  color: #94a3b8;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.metric-toggle:hover {
+  background: rgba(51, 65, 85, 0.4);
+}
+
+.metric-toggle.checked {
+  background: rgba(59, 130, 246, 0.08);
+  font-weight: 600;
+}
+
+.metric-toggle input {
+  accent-color: currentColor;
+  margin: 0;
+}
