@@ -4,12 +4,13 @@ import { parseFitFile } from './fit';
 import { uploadActivity } from './api';
 import ActivityView from './ActivityView';
 import TrendsView from './TrendsView';
+import HomeView from './HomeView';
 import './App.css';
 
-export type Tab = 'activity' | 'trends';
+export type Tab = 'home' | 'activity' | 'trends';
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('activity');
+  const [tab, setTab] = useState<Tab>('home');
   const [parsed, setParsed] = useState<ParsedFit | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +67,12 @@ export default function App() {
 
       <nav className="tabs">
         <button
+          className={`tab ${tab === 'home' ? 'active' : ''}`}
+          onClick={() => setTab('home')}
+        >
+          🏠 ホーム
+        </button>
+        <button
           className={`tab ${tab === 'activity' ? 'active' : ''}`}
           onClick={() => setTab('activity')}
         >
@@ -79,6 +86,7 @@ export default function App() {
         </button>
       </nav>
 
+      {tab === 'home' && <HomeView onNavigate={setTab} />}
       {tab === 'activity' && (
         <ActivityView
           parsed={parsed}
