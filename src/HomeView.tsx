@@ -5,6 +5,7 @@ import { listActivities } from './api';
 const SPORTS = [
   {
     key: 'swim',
+    sport: 'swimming',
     no: '01',
     name: 'SWIM',
     jp: 'スイム',
@@ -21,6 +22,7 @@ const SPORTS = [
   },
   {
     key: 'bike',
+    sport: 'cycling',
     no: '02',
     name: 'BIKE',
     jp: 'バイク',
@@ -37,6 +39,7 @@ const SPORTS = [
   },
   {
     key: 'run',
+    sport: 'running',
     no: '03',
     name: 'RUN',
     jp: 'ラン',
@@ -54,7 +57,13 @@ const SPORTS = [
 ];
 
 /** Top page: hero + per-sport cards linking to the other views. */
-export default function HomeView({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+export default function HomeView({
+  onNavigate,
+  onOpenSportTrends,
+}: {
+  onNavigate: (tab: Tab) => void;
+  onOpenSportTrends: (sport: string) => void;
+}) {
   const [stats, setStats] = useState<{ count: number; sports: number } | null>(null);
 
   useEffect(() => {
@@ -122,7 +131,7 @@ export default function HomeView({ onNavigate }: { onNavigate: (tab: Tab) => voi
             key={s.key}
             className="sh-sport"
             style={{ '--sport-color': s.color } as React.CSSProperties}
-            onClick={() => onNavigate('trends')}
+            onClick={() => onOpenSportTrends(s.sport)}
           >
             <span className="sh-sport-no">{s.no}</span>
             <span className="sh-sport-icon">{s.icon}</span>

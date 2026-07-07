@@ -11,6 +11,8 @@ export type Tab = 'home' | 'activity' | 'trends';
 
 export default function App() {
   const [tab, setTab] = useState<Tab>('home');
+  // Sport filter for the trends tab (null = all sports).
+  const [trendsSport, setTrendsSport] = useState<string | null>(null);
   const [parsed, setParsed] = useState<ParsedFit | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +88,18 @@ export default function App() {
         </button>
       </nav>
 
-      {tab === 'home' && <HomeView onNavigate={setTab} />}
+      {tab === 'home' && (
+        <HomeView
+          onNavigate={(t) => {
+            if (t === 'trends') setTrendsSport(null);
+            setTab(t);
+          }}
+          onOpenSportTrends={(sport) => {
+            setTrendsSport(sport);
+            setTab('trends');
+          }}
+        />
+      )}
       {tab === 'activity' && (
         <ActivityView
           parsed={parsed}
@@ -98,7 +111,13 @@ export default function App() {
           onSavedDeleted={() => setSavedVersion((v) => v + 1)}
         />
       )}
-      {tab === 'trends' && <TrendsView savedVersion={savedVersion} />}
+      {tab === 'trends' && (
+        <TrendsView
+          savedVersion={savedVersion}
+          sport={trendsSport}
+          onSportChange={setTrendsSport}
+        />
+      )}
     </div>
   );
 }

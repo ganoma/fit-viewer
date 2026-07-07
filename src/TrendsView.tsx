@@ -4,13 +4,21 @@ import { listActivities } from './api';
 import { extractTrendMetrics } from './charts';
 import MetricToggleChart from './MetricToggleChart';
 
-const SPORT_SECTIONS: { sport: string; title: string; defaults: string[] }[] = [
-  { sport: 'running', title: '🏃 ラン傾向', defaults: ['hr', 'stride'] },
-  { sport: 'cycling', title: '🚴 バイク傾向', defaults: ['hr', 'power'] },
-  { sport: 'swimming', title: '🏊 スイム傾向', defaults: ['hr', 'strokes'] },
+const SPORT_SECTIONS: { sport: string; title: string; label: string; defaults: string[] }[] = [
+  { sport: 'running', title: '🏃 ラン傾向', label: '🏃 ラン', defaults: ['hr', 'stride'] },
+  { sport: 'cycling', title: '🚴 バイク傾向', label: '🚴 バイク', defaults: ['hr', 'power'] },
+  { sport: 'swimming', title: '🏊 スイム傾向', label: '🏊 スイム', defaults: ['hr', 'strokes'] },
 ];
 
-export default function TrendsView({ savedVersion }: { savedVersion: number }) {
+export default function TrendsView({
+  savedVersion,
+  sport,
+  onSportChange,
+}: {
+  savedVersion: number;
+  sport: string | null;
+  onSportChange: (sport: string | null) => void;
+}) {
   const [activities, setActivities] = useState<ActivitySummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,27 +65,56 @@ export default function TrendsView({ savedVersion }: { savedVersion: number }) {
       </div>
     );
 
+  const visibleSections = SPORT_SECTIONS.filter((s) => sport == null || s.sport === sport);
+
   return (
     <>
       <p className="subtitle" style={{ marginBottom: 16 }}>
         保存済み {activities.length} 件のアクティビティから、スポーツごとの指標の推移を表示しています
       </p>
-      {SPORT_SECTIONS.map(({ sport, title, defaults }) => {
-        const entries = bySport.get(sport);
-        if (!entries || entries.length === 0) return null;
-        const { x, metrics } = extractTrendMetrics(entries);
-        if (metrics.length === 0) return null;
-        return (
-          <MetricToggleChart
-            key={sport}
-            title={`${title}（${entries.length}回）`}
-            x={x}
-            metrics={metrics}
-            defaultKeys={defaults.filter((k) => metrics.some((m) => m.key === k))}
-            mode="lines+markers"
-          />
+
+      <div className="metric-toggles" style={{ marginBottom: 20 }}>
+        <label className={`metric-toggle ${sport == null ? 'checked' : ''}`}>
+          <input type="checkbox" checked={sport == null} onChange={() => onSportChange(null)} />
+          すべて
+        </label>
+        {SPORT_SECTIONS.map((s) => (
+          <label key={s.sport} className={`metric-toggle ${sport === s.sport ? 'checked' : ''}`}>
+            <input
+              type="checkbox"
+              checked={sport === s.sport}
+              onChange={() => onSportChange(sport === s.sport ? null : s.sport)}
+            />
+            {s.label}
+          </label>
+        ))}
+      </div>
+
+      {(() => {
+        const rendered = visibleSections
+          .map(({ sport: sp, title, defaults }) => {
+            const entries = bySport.get(sp);
+            if (!entries || entries.length === 0) return null;
+            const { x, metrics } = extractTrendMetrics(entries);
+            if (metrics.length === 0) return null;
+            return (
+              <MetricToggleChart
+                key={sp}
+                title={`${title}（${entries.length}回）`}
+                x={x}
+                metrics={metrics}
+                defaultKeys={defaults.filter((k) => metrics.some((m) => m.key === k))}
+                mode="lines+markers"
+              />
+            );
+          })
+          .filter((n) => n != null);
+        return rendered.length > 0 ? (
+          rendered
+        ) : (
+          <p className="status">このスポーツの保存データはまだありません。</p>
         );
-      })}
+      })()}
     </>
   );
 }
