@@ -1,6 +1,7 @@
 // Builders that turn a parsed segment into Plotly figure specs.
 import type { FitLength, FitRecord, Segment } from './fit';
-import { fmtDuration, paceStr, rolling30s } from './fit';
+import { fmtDuration, pace100Str, paceStr, rolling30s } from './fit';
+import type { SportSummary } from './api';
 
 export interface Figure {
   data: any[];
@@ -471,7 +472,11 @@ export function extractSegmentMetrics(segment: Segment): { x: Date[]; metrics: M
  * One plot, one y-axis per selected metric. Axes alternate left/right;
  * beyond two they are stacked outward with free positioning.
  */
-export function buildOverlayFigure(x: Date[], metrics: Metric[]): Figure | null {
+export function buildOverlayFigure(
+  x: (Date | string)[],
+  metrics: Metric[],
+  mode = 'lines',
+): Figure | null {
   if (metrics.length === 0) return null;
 
   const n = metrics.length;
@@ -488,14 +493,15 @@ export function buildOverlayFigure(x: Date[], metrics: Metric[]): Figure | null 
   const data = metrics.map((m, i) => ({
     x,
     y: m.values,
-    name: `${m.title} (${m.unit})`,
+    name: m.unit ? `${m.title} (${m.unit})` : m.title,
     type: 'scatter',
-    mode: 'lines',
+    mode,
     line: { color: m.color, width: 1.4 },
+    marker: { size: 7, color: m.color },
     yaxis: i === 0 ? 'y' : `y${i + 1}`,
     text: m.text,
     hovertemplate: m.text
-      ? `${m.title}: %{text} /km<extra></extra>`
+      ? `${m.title}: %{text} ${m.unit}<extra></extra>`
       : `${m.title}: %{y:.1f} ${m.unit}<extra></extra>`,
   }));
 
@@ -547,4 +553,95 @@ export function buildOverlayFigure(x: Date[], metrics: Metric[]): Figure | null 
   });
 
   return { data, layout };
+}
+
+// ---- Trend metrics (across saved activities) ----
+
+function trendHasData(values: (number | null)[]): boolean {
+  return values.some((v) => v != null);
+}
+
+/** Per-sport trend series from stored activity summaries (x = activity date). */
+export function extractTrendMetrics(entries: SportSummary[]): {
+  x: Date[];
+  metrics: Metric[];
+} {
+  const sorted = [...entries].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const x = sorted.map((e) => new Date(e.startTime));
+  const sport = sorted[0]?.sport;
+  const isRun = sport === 'running';
+  const isSwim = sport === 'swimming';
+  const metrics: Metric[] = [];
+
+  const push = (
+    key: string,
+    title: string,
+    unit: string,
+    color: string,
+    values: (number | null)[],
+    extra?: Partial<Metric>,
+  ) => {
+    if (trendHasData(values)) metrics.push({ key, title, unit, color, values, ...extra });
+  };
+
+  push('hr', 'Avg Heart Rate', 'bpm', '#ef4444', sorted.map((e) => e.avgHr));
+
+  if (isRun) {
+    push('stride', 'Stride Length', 'm', '#f472b6', sorted.map((e) => e.avgStepLengthM));
+    const speeds = sorted.map((e) => e.avgSpeedKmh);
+    push(
+      'pace',
+      'Avg Pace',
+      'min/km',
+      '#f59e0b',
+      speeds.map((v) => (v != null && v > 0 ? 60 / v : null)),
+      {
+        reversed: true,
+        text: speeds.map((v) => paceStr(v ?? undefined)),
+      },
+    );
+    push(
+      'cadence',
+      'Avg Cadence',
+      'spm',
+      '#10b981',
+      sorted.map((e) => (e.avgCadence != null ? e.avgCadence * 2 : null)),
+    );
+  } else if (isSwim) {
+    push(
+      'strokes',
+      'Strokes / Length',
+      '回',
+      '#38bdf8',
+      sorted.map((e) => e.avgStrokesPerLength),
+    );
+    push('swolf', 'Avg SWOLF', '', '#f472b6', sorted.map((e) => e.avgSwolf));
+    const speeds = sorted.map((e) => e.avgSpeedKmh);
+    push(
+      'pace100',
+      'Avg Pace',
+      'min/100m',
+      '#f59e0b',
+      speeds.map((v) => (v != null && v > 0 ? 6 / v : null)),
+      {
+        reversed: true,
+        text: speeds.map((v) => pace100Str(v ?? undefined)),
+      },
+    );
+  } else {
+    push('power', 'Avg Power', 'W', '#3b82f6', sorted.map((e) => e.avgPower));
+    push('np', 'Normalized Power', 'W', '#818cf8', sorted.map((e) => e.normalizedPower));
+    push('speed', 'Avg Speed', 'km/h', '#f59e0b', sorted.map((e) => e.avgSpeedKmh));
+    push('cadence', 'Avg Cadence', 'rpm', '#10b981', sorted.map((e) => e.avgCadence));
+  }
+
+  push(
+    'distance',
+    'Distance',
+    'km',
+    '#a78bfa',
+    sorted.map((e) => (e.distanceM != null ? e.distanceM / 1000 : null)),
+  );
+
+  return { x, metrics };
 }

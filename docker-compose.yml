@@ -1,0 +1,11 @@
+services:
+  fit-viewer:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - fit-data:/data
+    restart: unless-stopped
+
+volumes:
+  fit-data:
