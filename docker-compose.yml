@@ -4,8 +4,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - fit-data:/data
+      # Uploaded .fit files and summaries live on the host, next to this
+      # compose file. Create the directory before first start so it is
+      # owned by your user (the container writes as UID 1000):
+      #   mkdir -p data
+      - ./data:/data
     restart: unless-stopped
-
-volumes:
-  fit-data:
