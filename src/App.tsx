@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ParsedFit } from './fit';
 import { parseFitFile } from './fit';
 import { uploadActivity } from './api';
@@ -9,16 +9,50 @@ import './App.css';
 
 export type Tab = 'home' | 'activity' | 'trends';
 
+interface Route {
+  tab: Tab;
+  sport: string | null;
+}
+
+const TREND_SPORTS = ['running', 'cycling', 'swimming'];
+
+// The URL hash is the source of truth for navigation, so the browser's
+// back/forward buttons walk through tab and sport-filter changes.
+//   #/          -> home
+//   #/activity  -> activity viewer
+//   #/trends    -> trends (all sports)
+//   #/trends/<sport> -> trends filtered to one sport
+function parseHash(): Route {
+  const segments = window.location.hash.replace(/^#\/?/, '').split('/');
+  if (segments[0] === 'activity') return { tab: 'activity', sport: null };
+  if (segments[0] === 'trends') {
+    const sport = TREND_SPORTS.includes(segments[1]) ? segments[1] : null;
+    return { tab: 'trends', sport };
+  }
+  return { tab: 'home', sport: null };
+}
+
+function navigate(tab: Tab, sport: string | null = null) {
+  window.location.hash =
+    tab === 'home' ? '/' : tab === 'activity' ? '/activity' : sport ? `/trends/${sport}` : '/trends';
+}
+
 export default function App() {
-  const [tab, setTab] = useState<Tab>('home');
-  // Sport filter for the trends tab (null = all sports).
-  const [trendsSport, setTrendsSport] = useState<string | null>(null);
+  const [route, setRoute] = useState<Route>(parseHash);
   const [parsed, setParsed] = useState<ParsedFit | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   // Bumped whenever the server-side activity list may have changed.
   const [savedVersion, setSavedVersion] = useState(0);
+
+  useEffect(() => {
+    const onHashChange = () => setRoute(parseHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const { tab, sport } = route;
 
   const handleFile = useCallback(async (file: File) => {
     setLoading(true);
@@ -70,19 +104,19 @@ export default function App() {
       <nav className="tabs">
         <button
           className={`tab ${tab === 'home' ? 'active' : ''}`}
-          onClick={() => setTab('home')}
+          onClick={() => navigate('home')}
         >
           🏠 ホーム
         </button>
         <button
           className={`tab ${tab === 'activity' ? 'active' : ''}`}
-          onClick={() => setTab('activity')}
+          onClick={() => navigate('activity')}
         >
           📊 アクティビティ
         </button>
         <button
           className={`tab ${tab === 'trends' ? 'active' : ''}`}
-          onClick={() => setTab('trends')}
+          onClick={() => navigate('trends')}
         >
           📈 傾向分析
         </button>
@@ -90,14 +124,8 @@ export default function App() {
 
       {tab === 'home' && (
         <HomeView
-          onNavigate={(t) => {
-            if (t === 'trends') setTrendsSport(null);
-            setTab(t);
-          }}
-          onOpenSportTrends={(sport) => {
-            setTrendsSport(sport);
-            setTab('trends');
-          }}
+          onNavigate={(t) => navigate(t)}
+          onOpenSportTrends={(s) => navigate('trends', s)}
         />
       )}
       {tab === 'activity' && (
@@ -114,8 +142,8 @@ export default function App() {
       {tab === 'trends' && (
         <TrendsView
           savedVersion={savedVersion}
-          sport={trendsSport}
-          onSportChange={setTrendsSport}
+          sport={sport}
+          onSportChange={(s) => navigate('trends', s)}
         />
       )}
     </div>
