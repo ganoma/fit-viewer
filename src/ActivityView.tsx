@@ -8,6 +8,7 @@ import Plot from './Plot';
 import SegmentChart from './SegmentChart';
 import BikeDetails from './BikeDetails';
 import SwimDetails from './SwimDetails';
+import DiaryCard from './DiaryCard';
 
 const SPORT_EMOJI: Record<string, string> = {
   swimming: '🏊',
@@ -17,20 +18,24 @@ const SPORT_EMOJI: Record<string, string> = {
 
 export default function ActivityView({
   parsed,
+  currentActivityId,
   loading,
   error,
   uploadNote,
   savedVersion,
   onFile,
   onSavedDeleted,
+  onNoteSaved,
 }: {
   parsed: ParsedFit | null;
+  currentActivityId: string | null;
   loading: boolean;
   error: string | null;
   uploadNote: string | null;
   savedVersion: number;
   onFile: (file: File) => void;
   onSavedDeleted: () => void;
+  onNoteSaved: () => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [saved, setSaved] = useState<ActivitySummary[] | null>(null);
@@ -101,7 +106,10 @@ export default function ActivityView({
                   <span className="saved-date">
                     {a.startTime ? new Date(a.startTime).toLocaleDateString('ja-JP') : '-'}
                   </span>
-                  <span className="saved-name">{a.fileName}</span>
+                  <span className="saved-name">
+                    {a.fileName}
+                    {a.hasNote && <span title="日記あり"> 📝</span>}
+                  </span>
                   <span className="saved-sports">
                     {a.sports.map((s) => SPORT_EMOJI[s.sport] ?? '🏅').join(' ')}
                   </span>
@@ -145,6 +153,10 @@ export default function ActivityView({
       {parsed && !loading && (
         <>
           <h2 className="file-name">📄 {parsed.fileName}</h2>
+
+          {currentActivityId && (
+            <DiaryCard activityId={currentActivityId} onSaved={onNoteSaved} />
+          )}
 
           {(() => {
             const segs = parsed.segments;

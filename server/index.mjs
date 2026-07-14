@@ -15,6 +15,7 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const app = express();
+app.use(express.json({ limit: '1mb' }));
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
@@ -22,6 +23,9 @@ const upload = multer({
 
 const summaryPath = (id) => path.join(DATA_DIR, `${id}.json`);
 const fitPath = (id) => path.join(DATA_DIR, `${id}.fit`);
+// Diary notes live as plain markdown next to the fit/summary files, so a
+// future LLM-analysis step can slurp them together with the summaries.
+const notePath = (id) => path.join(DATA_DIR, `${id}.note.md`);
 const validId = (id) => /^[0-9a-f]{16}$/.test(id);
 
 app.post('/api/activities', upload.single('file'), async (req, res) => {
@@ -51,8 +55,30 @@ app.get('/api/activities', (_req, res) => {
       }
     })
     .filter((s) => s != null)
+    .map((s) => ({ ...s, hasNote: fs.existsSync(notePath(s.id)) }))
     .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''));
   res.json(summaries);
+});
+
+app.get('/api/activities/:id/note', (req, res) => {
+  const { id } = req.params;
+  if (!validId(id)) return res.status(400).json({ error: 'bad id' });
+  const note = fs.existsSync(notePath(id)) ? fs.readFileSync(notePath(id), 'utf-8') : '';
+  res.json({ note });
+});
+
+app.put('/api/activities/:id/note', (req, res) => {
+  const { id } = req.params;
+  if (!validId(id) || !fs.existsSync(summaryPath(id))) {
+    return res.status(404).json({ error: 'アクティビティが見つかりません' });
+  }
+  const note = typeof req.body?.note === 'string' ? req.body.note : '';
+  if (note.trim() === '') {
+    fs.rmSync(notePath(id), { force: true });
+  } else {
+    fs.writeFileSync(notePath(id), note, 'utf-8');
+  }
+  res.json({ ok: true, hasNote: note.trim() !== '' });
 });
 
 app.get('/api/activities/:id/fit', (req, res) => {
@@ -68,6 +94,7 @@ app.delete('/api/activities/:id', (req, res) => {
   if (!validId(id)) return res.status(400).json({ error: 'bad id' });
   fs.rmSync(fitPath(id), { force: true });
   fs.rmSync(summaryPath(id), { force: true });
+  fs.rmSync(notePath(id), { force: true });
   res.json({ ok: true });
 });
 

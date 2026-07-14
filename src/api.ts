@@ -21,6 +21,7 @@ export interface ActivitySummary {
   uploadedAt: string;
   startTime: string | null;
   sports: SportSummary[];
+  hasNote?: boolean;
 }
 
 async function toJson<T>(res: Response): Promise<T> {
@@ -55,4 +56,19 @@ export async function fetchActivityFile(activity: ActivitySummary): Promise<File
 
 export async function deleteActivity(id: string): Promise<void> {
   await toJson(await fetch(`/api/activities/${id}`, { method: 'DELETE' }));
+}
+
+export async function getNote(id: string): Promise<string> {
+  const res = await toJson<{ note: string }>(await fetch(`/api/activities/${id}/note`));
+  return res.note;
+}
+
+export async function saveNote(id: string, note: string): Promise<void> {
+  await toJson(
+    await fetch(`/api/activities/${id}/note`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    }),
+  );
 }

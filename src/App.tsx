@@ -43,6 +43,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
+  // Server-side id of the activity currently displayed (enables the diary).
+  const [currentActivityId, setCurrentActivityId] = useState<string | null>(null);
   // Bumped whenever the server-side activity list may have changed.
   const [savedVersion, setSavedVersion] = useState(0);
 
@@ -63,8 +65,10 @@ export default function App() {
       try {
         const summary = await uploadActivity(file);
         setUploadNote(`💾 保存しました（${summary.fileName}）`);
+        setCurrentActivityId(summary.id);
         setSavedVersion((v) => v + 1);
       } catch (e) {
+        setCurrentActivityId(null);
         setUploadNote(
           `ℹ️ サーバー保存はスキップされました: ${e instanceof Error ? e.message : e}`,
         );
@@ -131,12 +135,14 @@ export default function App() {
       {tab === 'activity' && (
         <ActivityView
           parsed={parsed}
+          currentActivityId={currentActivityId}
           loading={loading}
           error={error}
           uploadNote={uploadNote}
           savedVersion={savedVersion}
           onFile={handleFile}
           onSavedDeleted={() => setSavedVersion((v) => v + 1)}
+          onNoteSaved={() => setSavedVersion((v) => v + 1)}
         />
       )}
       {tab === 'trends' && (
