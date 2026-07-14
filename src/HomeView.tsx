@@ -89,6 +89,7 @@ export default function HomeView({
         <div className="sh-glow sh-glow-2" />
         <div className="sh-glow sh-glow-3" />
         <div className="sh-grid" />
+        <span className="sh-version">v{__APP_VERSION__}</span>
 
         <p className="sh-eyebrow">
           <span style={{ color: '#22d3ee' }}>SWIM</span>
