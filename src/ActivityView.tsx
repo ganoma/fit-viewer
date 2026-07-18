@@ -9,6 +9,7 @@ import SegmentChart from './SegmentChart';
 import BikeDetails from './BikeDetails';
 import SwimDetails from './SwimDetails';
 import DiaryCard from './DiaryCard';
+import ShoeTagCard from './ShoeTagCard';
 
 const SPORT_EMOJI: Record<string, string> = {
   swimming: '🏊',
@@ -40,6 +41,8 @@ export default function ActivityView({
   const [dragOver, setDragOver] = useState(false);
   const [saved, setSaved] = useState<ActivitySummary[] | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
+  // Shoe-tag filter for the saved list (null = show all).
+  const [shoeFilter, setShoeFilter] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,30 +102,60 @@ export default function ActivityView({
       {saved && saved.length > 0 && (
         <div className="card">
           <h3>💾 保存済みアクティビティ</h3>
+          {(() => {
+            const shoes = [...new Set(saved.map((a) => a.shoe).filter((s): s is string => !!s))];
+            if (shoes.length === 0) return null;
+            return (
+              <div className="metric-toggles">
+                <label className={`metric-toggle ${shoeFilter == null ? 'checked' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={shoeFilter == null}
+                    onChange={() => setShoeFilter(null)}
+                  />
+                  すべて
+                </label>
+                {shoes.map((s) => (
+                  <label key={s} className={`metric-toggle ${shoeFilter === s ? 'checked' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={shoeFilter === s}
+                      onChange={() => setShoeFilter(shoeFilter === s ? null : s)}
+                    />
+                    👟 {s}
+                  </label>
+                ))}
+              </div>
+            );
+          })()}
           <ul className="saved-list">
-            {[...saved].reverse().map((a) => (
-              <li key={a.id}>
-                <button className="saved-item" onClick={() => openSaved(a)}>
-                  <span className="saved-date">
-                    {a.startTime ? new Date(a.startTime).toLocaleDateString('ja-JP') : '-'}
-                  </span>
-                  <span className="saved-name">
-                    {a.fileName}
-                    {a.hasNote && <span title="日記あり"> 📝</span>}
-                  </span>
-                  <span className="saved-sports">
-                    {a.sports.map((s) => SPORT_EMOJI[s.sport] ?? '🏅').join(' ')}
-                  </span>
-                </button>
-                <button
-                  className="saved-delete"
-                  title="削除"
-                  onClick={() => removeSaved(a)}
-                >
-                  ✕
-                </button>
-              </li>
-            ))}
+            {[...saved]
+              .reverse()
+              .filter((a) => shoeFilter == null || a.shoe === shoeFilter)
+              .map((a) => (
+                <li key={a.id}>
+                  <button className="saved-item" onClick={() => openSaved(a)}>
+                    <span className="saved-date">
+                      {a.startTime ? new Date(a.startTime).toLocaleDateString('ja-JP') : '-'}
+                    </span>
+                    <span className="saved-name">
+                      {a.fileName}
+                      {a.hasNote && <span title="日記あり"> 📝</span>}
+                      {a.shoe && <span className="saved-shoe">👟 {a.shoe}</span>}
+                    </span>
+                    <span className="saved-sports">
+                      {a.sports.map((s) => SPORT_EMOJI[s.sport] ?? '🏅').join(' ')}
+                    </span>
+                  </button>
+                  <button
+                    className="saved-delete"
+                    title="削除"
+                    onClick={() => removeSaved(a)}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
           </ul>
         </div>
       )}
@@ -156,6 +189,14 @@ export default function ActivityView({
 
           {currentActivityId && (
             <DiaryCard activityId={currentActivityId} onSaved={onNoteSaved} />
+          )}
+
+          {currentActivityId && parsed.segments.some((s) => s.sport === 'running') && (
+            <ShoeTagCard
+              activityId={currentActivityId}
+              initialShoe={saved?.find((a) => a.id === currentActivityId)?.shoe ?? null}
+              onSaved={onNoteSaved}
+            />
           )}
 
           {(() => {

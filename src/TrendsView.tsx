@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ActivitySummary, SportSummary } from './api';
-import { listActivities } from './api';
+import type { ActivitySummary, ShoeStats, SportSummary } from './api';
+import { listActivities, listShoes } from './api';
 import { extractTrendMetrics } from './charts';
 import MetricToggleChart from './MetricToggleChart';
 
@@ -20,7 +20,16 @@ export default function TrendsView({
   onSportChange: (sport: string | null) => void;
 }) {
   const [activities, setActivities] = useState<ActivitySummary[] | null>(null);
+  const [shoes, setShoes] = useState<ShoeStats[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    listShoes()
+      .then(setShoes)
+      .catch(() => {
+        /* optional section */
+      });
+  }, [savedVersion]);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +124,34 @@ export default function TrendsView({
           <p className="status">このスポーツの保存データはまだありません。</p>
         );
       })()}
+
+      {(sport == null || sport === 'running') && shoes.length > 0 && (
+        <div className="card">
+          <h3>👟 シューズ走行距離</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>シューズ</th>
+                <th>ラン回数</th>
+                <th>合計距離</th>
+                <th>最終使用日</th>
+              </tr>
+            </thead>
+            <tbody>
+              {shoes.map((s) => (
+                <tr key={s.name}>
+                  <td className="seg-label">{s.name}</td>
+                  <td>{s.runCount} 回</td>
+                  <td>{s.totalKm.toFixed(1)} km</td>
+                  <td>
+                    {s.lastUsed ? new Date(s.lastUsed).toLocaleDateString('ja-JP') : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

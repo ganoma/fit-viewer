@@ -22,6 +22,7 @@ export interface ActivitySummary {
   startTime: string | null;
   sports: SportSummary[];
   hasNote?: boolean;
+  shoe?: string | null;
 }
 
 async function toJson<T>(res: Response): Promise<T> {
@@ -71,4 +72,25 @@ export async function saveNote(id: string, note: string): Promise<void> {
       body: JSON.stringify({ note }),
     }),
   );
+}
+
+export interface ShoeStats {
+  name: string;
+  runCount: number;
+  totalKm: number;
+  lastUsed: string | null;
+}
+
+export async function saveShoe(id: string, shoe: string | null): Promise<void> {
+  await toJson(
+    await fetch(`/api/activities/${id}/shoe`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shoe: shoe ?? '' }),
+    }),
+  );
+}
+
+export async function listShoes(): Promise<ShoeStats[]> {
+  return toJson(await fetch('/api/shoes'));
 }

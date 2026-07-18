@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
 import express from 'express';
 import multer from 'multer';
 import { buildSummary, parseFitBuffer } from './summary.mjs';
@@ -13,6 +14,23 @@ const PORT = Number(process.env.PORT ?? 3001);
 const DIST_DIR = path.join(__dirname, '..', 'dist');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
+
+// Tags live in SQLite (node:sqlite, zero deps); summaries stay file-based.
+const db = new DatabaseSync(path.join(DATA_DIR, 'fitviewer.db'));
+db.exec(`
+  CREATE TABLE IF NOT EXISTS activity_shoes (
+    activity_id TEXT PRIMARY KEY,
+    shoe TEXT NOT NULL
+  )
+`);
+
+const getShoeMap = () => {
+  const map = new Map();
+  for (const row of db.prepare('SELECT activity_id, shoe FROM activity_shoes').all()) {
+    map.set(row.activity_id, row.shoe);
+  }
+  return map;
+};
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -44,6 +62,7 @@ app.post('/api/activities', upload.single('file'), async (req, res) => {
 });
 
 app.get('/api/activities', (_req, res) => {
+  const shoeMap = getShoeMap();
   const summaries = fs
     .readdirSync(DATA_DIR)
     .filter((f) => f.endsWith('.json'))
@@ -55,9 +74,59 @@ app.get('/api/activities', (_req, res) => {
       }
     })
     .filter((s) => s != null)
-    .map((s) => ({ ...s, hasNote: fs.existsSync(notePath(s.id)) }))
+    .map((s) => ({
+      ...s,
+      hasNote: fs.existsSync(notePath(s.id)),
+      shoe: shoeMap.get(s.id) ?? null,
+    }))
     .sort((a, b) => (a.startTime ?? '').localeCompare(b.startTime ?? ''));
   res.json(summaries);
+});
+
+app.put('/api/activities/:id/shoe', (req, res) => {
+  const { id } = req.params;
+  if (!validId(id) || !fs.existsSync(summaryPath(id))) {
+    return res.status(404).json({ error: 'アクティビティが見つかりません' });
+  }
+  const shoe = typeof req.body?.shoe === 'string' ? req.body.shoe.trim() : '';
+  if (shoe === '') {
+    db.prepare('DELETE FROM activity_shoes WHERE activity_id = ?').run(id);
+  } else {
+    db.prepare(
+      'INSERT INTO activity_shoes (activity_id, shoe) VALUES (?, ?) ' +
+        'ON CONFLICT(activity_id) DO UPDATE SET shoe = excluded.shoe',
+    ).run(id, shoe);
+  }
+  res.json({ ok: true, shoe: shoe || null });
+});
+
+// Per-shoe aggregates: run count, total running distance, last used date.
+app.get('/api/shoes', (_req, res) => {
+  const shoeMap = getShoeMap();
+  const stats = new Map();
+  for (const [activityId, shoe] of shoeMap) {
+    if (!fs.existsSync(summaryPath(activityId))) continue;
+    let summary;
+    try {
+      summary = JSON.parse(fs.readFileSync(summaryPath(activityId), 'utf-8'));
+    } catch {
+      continue;
+    }
+    const runKm = summary.sports
+      .filter((s) => s.sport === 'running')
+      .reduce((sum, s) => sum + (s.distanceM ?? 0), 0) / 1000;
+    const cur = stats.get(shoe) ?? { name: shoe, runCount: 0, totalKm: 0, lastUsed: null };
+    cur.runCount += 1;
+    cur.totalKm += runKm;
+    if (summary.startTime && (!cur.lastUsed || summary.startTime > cur.lastUsed)) {
+      cur.lastUsed = summary.startTime;
+    }
+    stats.set(shoe, cur);
+  }
+  const list = [...stats.values()]
+    .map((s) => ({ ...s, totalKm: Math.round(s.totalKm * 10) / 10 }))
+    .sort((a, b) => b.totalKm - a.totalKm);
+  res.json(list);
 });
 
 app.get('/api/activities/:id/note', (req, res) => {
@@ -95,6 +164,7 @@ app.delete('/api/activities/:id', (req, res) => {
   fs.rmSync(fitPath(id), { force: true });
   fs.rmSync(summaryPath(id), { force: true });
   fs.rmSync(notePath(id), { force: true });
+  db.prepare('DELETE FROM activity_shoes WHERE activity_id = ?').run(id);
   res.json({ ok: true });
 });
 
