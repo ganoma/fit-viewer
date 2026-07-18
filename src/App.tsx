@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ParsedFit } from './fit';
 import { parseFitFile } from './fit';
 import { uploadActivity } from './api';
+import { dateBasedName, extractSingleFit, isZipFile } from './zip';
 import ActivityView from './ActivityView';
 import TrendsView from './TrendsView';
 import HomeView from './HomeView';
@@ -61,9 +62,26 @@ export default function App() {
     setError(null);
     setUploadNote(null);
     try {
-      setParsed(await parseFitFile(file));
+      // Garmin Connect exports arrive as a zip holding one .fit — unzip it
+      // and name the file after the activity date (JST).
+      let workFile = file;
+      let fromZip = false;
+      if (isZipFile(file)) {
+        const { bytes, entryName } = await extractSingleFit(file);
+        workFile = new File([bytes as BlobPart], entryName);
+        fromZip = true;
+      }
+      let result = await parseFitFile(workFile);
+      if (fromZip) {
+        const start =
+          result.segments[0]?.session.start_time ?? result.allRecords[0]?.timestamp;
+        const name = dateBasedName(start ? new Date(start) : undefined, workFile.name);
+        workFile = new File([await workFile.arrayBuffer()], name);
+        result = { ...result, fileName: name };
+      }
+      setParsed(result);
       try {
-        const summary = await uploadActivity(file);
+        const summary = await uploadActivity(workFile);
         setUploadNote(`💾 保存しました（${summary.fileName}）`);
         setCurrentActivityId(summary.id);
         setSavedVersion((v) => v + 1);
@@ -93,7 +111,7 @@ export default function App() {
             FITファイルを選択
             <input
               type="file"
-              accept=".fit"
+              accept=".fit,.zip"
               hidden
               onChange={(e) => {
                 const file = e.target.files?.[0];
