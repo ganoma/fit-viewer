@@ -140,9 +140,10 @@ export default function ActivityView({
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
         >
-          <p className="dropzone-main">ここに .fit ファイルをドラッグ&ドロップ</p>
+          <p className="dropzone-main">ここに .fit / .zip ファイルをドラッグ&ドロップ</p>
           <p className="dropzone-sub">
-            または右上のボタンから選択（解析後、サーバーに保存され傾向分析に反映されます）
+            または右上のボタンから選択（解析後、サーバーに保存され傾向分析に反映されます）。
+            .fitを1つ含むzip（Garmin Connectエクスポート等）は自動解凍し、アクティビティ日付をファイル名にして保存します
           </p>
         </div>
       )}
