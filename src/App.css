@@ -231,6 +231,11 @@ td {
   list-style: none;
   margin: 0;
   padding: 0;
+  /* 約5行分の高さに制限し、それ以上はスクロール */
+  max-height: 202px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #475569 transparent;
 }
 
 .saved-list li {
