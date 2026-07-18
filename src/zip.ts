@@ -34,11 +34,11 @@ export async function extractSingleFit(file: File): Promise<ExtractedFit> {
   return { bytes: entries[fitNames[0]], entryName: fitNames[0].split('/').pop()! };
 }
 
-/** Activity start (JST) -> "YYYYMMDD.fit"; falls back to the zip entry name. */
+/** Activity start (JST) -> "YYYYMMDD_HHMMSS.fit"; falls back to the zip entry name. */
 export function dateBasedName(start: Date | undefined, fallback: string): string {
   if (!start || Number.isNaN(+start)) return fallback;
-  const ymd = start
-    .toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' })
-    .replaceAll('-', '');
-  return `${ymd}.fit`;
+  // sv-SE formats as "YYYY-MM-DD HH:MM:SS", easy to reshape.
+  const jst = start.toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  const [date, time] = jst.split(' ');
+  return `${date.replaceAll('-', '')}_${time.replaceAll(':', '')}.fit`;
 }
