@@ -114,6 +114,9 @@ export default function HomeView({
           <button className="sh-cta ghost" onClick={() => onNavigate('trends')}>
             傾向分析を見る
           </button>
+          <button className="sh-cta ghost" onClick={() => onNavigate('thresholds')}>
+            ⚡ 閾値（LT1 / LT2 / FTP）
+          </button>
         </div>
 
         {stats && stats.count > 0 && (

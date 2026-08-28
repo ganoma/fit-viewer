@@ -94,3 +94,42 @@ export async function saveShoe(id: string, shoe: string | null): Promise<void> {
 export async function listShoes(): Promise<ShoeStats[]> {
   return toJson(await fetch('/api/shoes'));
 }
+
+export interface CriticalFit {
+  value?: number;
+  valueKmh?: number;
+  wPrimeJ?: number;
+  dPrimeM?: number;
+  r2: number;
+  durationsUsed: number[];
+}
+
+export interface SportThresholds {
+  sport: string;
+  activityCount: number;
+  powerCurve: Record<string, number> | null;
+  speedCurve: Record<string, number> | null;
+  hrCurve: Record<string, number> | null;
+  lthr: { value: number; fromDurationSec: number } | null;
+  cp: CriticalFit | null;
+  cs: CriticalFit | null;
+  ftp: { value: number; method: string; best20min: number | null } | null;
+  lt1: { power?: number; speedKmh?: number; hr?: number };
+  lt2: { power?: number; speedKmh?: number; hr?: number };
+  zones: {
+    power: { name: string; from: number; to: number | null }[] | null;
+    hr: { name: string; from: number; to: number | null }[] | null;
+  };
+}
+
+export interface ThresholdsResponse {
+  days: number;
+  activityCount: number;
+  newlyComputed: number;
+  notes: Record<string, string>;
+  sports: Record<string, SportThresholds>;
+}
+
+export async function getThresholds(days: number): Promise<ThresholdsResponse> {
+  return toJson(await fetch(`/api/thresholds?days=${days}`));
+}

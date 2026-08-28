@@ -1,5 +1,5 @@
-// API + static file server. In the container this is the single entry point:
-// it serves the built React app from ../dist and persists uploads to DATA_DIR.
+// APIサーバー兼静的ファイル配信。コンテナではこれが唯一のエントリポイントで、
+// ../dist のビルド済みReactアプリを配信し、アップロードを DATA_DIR に永続化する。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,8 @@ import { DatabaseSync } from 'node:sqlite';
 import express from 'express';
 import multer from 'multer';
 import { buildSummary, parseFitBuffer } from './summary.mjs';
+import { buildCurves } from './curves.mjs';
+import { estimateThresholds, hrZones, powerZones, THRESHOLD_NOTES } from './thresholds.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, '..', 'data');
@@ -15,7 +17,7 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// Tags live in SQLite (node:sqlite, zero deps); summaries stay file-based.
+// タグ類はSQLite（node:sqlite、追加依存なし）に置く。サマリーはファイルのまま。
 const db = new DatabaseSync(path.join(DATA_DIR, 'fitviewer.db'));
 db.exec(`
   CREATE TABLE IF NOT EXISTS activity_shoes (
@@ -23,6 +25,28 @@ db.exec(`
     shoe TEXT NOT NULL
   )
 `);
+
+// 平均最大カーブの算出はfitの再パースを伴って重いので、アクティビティ単位で
+// キャッシュし、無いときだけ作り直す。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS activity_curves (
+    activity_id TEXT PRIMARY KEY,
+    start_time TEXT,
+    computed_at TEXT NOT NULL,
+    curves_json TEXT NOT NULL
+  )
+`);
+
+async function computeCurvesFor(id, startTime) {
+  const data = await parseFitBuffer(fs.readFileSync(fitPath(id)));
+  const curves = buildCurves(data);
+  db.prepare(
+    'INSERT INTO activity_curves (activity_id, start_time, computed_at, curves_json) ' +
+      'VALUES (?, ?, ?, ?) ON CONFLICT(activity_id) DO UPDATE SET ' +
+      'start_time = excluded.start_time, computed_at = excluded.computed_at, curves_json = excluded.curves_json',
+  ).run(id, startTime ?? null, new Date().toISOString(), JSON.stringify(curves));
+  return curves;
+}
 
 const getShoeMap = () => {
   const map = new Map();
@@ -41,20 +65,30 @@ const upload = multer({
 
 const summaryPath = (id) => path.join(DATA_DIR, `${id}.json`);
 const fitPath = (id) => path.join(DATA_DIR, `${id}.fit`);
-// Diary notes live as plain markdown next to the fit/summary files, so a
-// future LLM-analysis step can slurp them together with the summaries.
+// 日記はfit本体・サマリーと同じ場所にMarkdownとして置く。将来LLMで分析する際に
+// サマリーとまとめて読み込めるようにするため。
 const notePath = (id) => path.join(DATA_DIR, `${id}.note.md`);
 const validId = (id) => /^[0-9a-f]{16}$/.test(id);
 
 app.post('/api/activities', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'ファイルがありません' });
-    // multer delivers originalname as latin1; recover UTF-8 (Japanese file names).
+    // multerはoriginalnameをlatin1で渡してくるので、UTF-8に復元する（日本語ファイル名対策）。
     const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
     const data = await parseFitBuffer(req.file.buffer);
     const summary = buildSummary(originalName, data, req.file.buffer);
     fs.writeFileSync(fitPath(summary.id), req.file.buffer);
     fs.writeFileSync(summaryPath(summary.id), JSON.stringify(summary, null, 1));
+    try {
+      const curves = buildCurves(data);
+      db.prepare(
+        'INSERT INTO activity_curves (activity_id, start_time, computed_at, curves_json) ' +
+          'VALUES (?, ?, ?, ?) ON CONFLICT(activity_id) DO UPDATE SET ' +
+          'start_time = excluded.start_time, computed_at = excluded.computed_at, curves_json = excluded.curves_json',
+      ).run(summary.id, summary.startTime, new Date().toISOString(), JSON.stringify(curves));
+    } catch (e) {
+      console.warn(`curve extraction failed for ${summary.id}: ${e.message}`);
+    }
     res.json(summary);
   } catch (e) {
     res.status(500).json({ error: `FITの解析・保存に失敗しました: ${e.message}` });
@@ -100,7 +134,85 @@ app.put('/api/activities/:id/shoe', (req, res) => {
   res.json({ ok: true, shoe: shoe || null });
 });
 
-// Per-shoe aggregates: run count, total running distance, last used date.
+/**
+ * 保存済みアクティビティの平均最大カーブから、スポーツ別に LT1 / LT2 / FTP を
+ * 推定して返す。期間は ?days=N で指定（省略または0なら全期間）。
+ * キャッシュが無いカーブはこのタイミングで計算して保存する。
+ */
+app.get('/api/thresholds', async (req, res) => {
+  try {
+    const days = Number(req.query.days) || 0;
+    const cutoff = days > 0 ? new Date(Date.now() - days * 86400_000).toISOString() : null;
+
+    const summaries = fs
+      .readdirSync(DATA_DIR)
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => {
+        try {
+          return JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf-8'));
+        } catch {
+          return null;
+        }
+      })
+      .filter((s) => s != null && fs.existsSync(fitPath(s.id)))
+      .filter((s) => cutoff == null || (s.startTime ?? '') >= cutoff);
+
+    const cached = new Map(
+      db
+        .prepare('SELECT activity_id, curves_json FROM activity_curves')
+        .all()
+        .map((r) => [r.activity_id, r.curves_json]),
+    );
+
+    let computed = 0;
+    const bySport = new Map();
+    for (const s of summaries) {
+      let json = cached.get(s.id);
+      if (json == null) {
+        try {
+          json = JSON.stringify(await computeCurvesFor(s.id, s.startTime));
+          computed += 1;
+        } catch (e) {
+          console.warn(`curve extraction failed for ${s.id}: ${e.message}`);
+          continue;
+        }
+      }
+      let curves;
+      try {
+        curves = JSON.parse(json);
+      } catch {
+        continue;
+      }
+      for (const [sport, curve] of Object.entries(curves)) {
+        if (!bySport.has(sport)) bySport.set(sport, []);
+        bySport.get(sport).push(curve);
+      }
+    }
+
+    const sports = {};
+    for (const [sport, list] of bySport) {
+      const est = estimateThresholds(sport, list);
+      if (!est) continue;
+      est.zones = {
+        power: powerZones(est.ftp?.value),
+        hr: hrZones(est.lthr?.value),
+      };
+      sports[sport] = est;
+    }
+
+    res.json({
+      days,
+      activityCount: summaries.length,
+      newlyComputed: computed,
+      notes: THRESHOLD_NOTES,
+      sports,
+    });
+  } catch (e) {
+    res.status(500).json({ error: `閾値の算出に失敗しました: ${e.message}` });
+  }
+});
+
+// シューズ別の集計: ラン回数・ラン合計距離・最終使用日。
 app.get('/api/shoes', (_req, res) => {
   const shoeMap = getShoeMap();
   const stats = new Map();
@@ -165,11 +277,12 @@ app.delete('/api/activities/:id', (req, res) => {
   fs.rmSync(summaryPath(id), { force: true });
   fs.rmSync(notePath(id), { force: true });
   db.prepare('DELETE FROM activity_shoes WHERE activity_id = ?').run(id);
+  db.prepare('DELETE FROM activity_curves WHERE activity_id = ?').run(id);
   res.json({ ok: true });
 });
 
-// Static app (production / container). In dev, Vite serves the app and
-// proxies /api here, so this is a no-op when dist doesn't exist.
+// 静的アプリの配信（本番・コンテナ用）。開発時はViteがアプリを配信して /api を
+// ここへプロキシするので、distが無ければ何もしない。
 if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR));
   app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(DIST_DIR, 'index.html')));
