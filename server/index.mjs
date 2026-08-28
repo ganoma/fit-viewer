@@ -1,5 +1,5 @@
-// API + static file server. In the container this is the single entry point:
-// it serves the built React app from ../dist and persists uploads to DATA_DIR.
+// APIサーバー兼静的ファイル配信。コンテナではこれが唯一のエントリポイントで、
+// ../dist のビルド済みReactアプリを配信し、アップロードを DATA_DIR に永続化する。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,7 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// Tags live in SQLite (node:sqlite, zero deps); summaries stay file-based.
+// タグ類はSQLite（node:sqlite、追加依存なし）に置く。サマリーはファイルのまま。
 const db = new DatabaseSync(path.join(DATA_DIR, 'fitviewer.db'));
 db.exec(`
   CREATE TABLE IF NOT EXISTS activity_shoes (
@@ -26,8 +26,8 @@ db.exec(`
   )
 `);
 
-// Mean-maximal curves are expensive to compute (full re-parse of the fit),
-// so they are cached per activity and only rebuilt when missing.
+// 平均最大カーブの算出はfitの再パースを伴って重いので、アクティビティ単位で
+// キャッシュし、無いときだけ作り直す。
 db.exec(`
   CREATE TABLE IF NOT EXISTS activity_curves (
     activity_id TEXT PRIMARY KEY,
@@ -65,15 +65,15 @@ const upload = multer({
 
 const summaryPath = (id) => path.join(DATA_DIR, `${id}.json`);
 const fitPath = (id) => path.join(DATA_DIR, `${id}.fit`);
-// Diary notes live as plain markdown next to the fit/summary files, so a
-// future LLM-analysis step can slurp them together with the summaries.
+// 日記はfit本体・サマリーと同じ場所にMarkdownとして置く。将来LLMで分析する際に
+// サマリーとまとめて読み込めるようにするため。
 const notePath = (id) => path.join(DATA_DIR, `${id}.note.md`);
 const validId = (id) => /^[0-9a-f]{16}$/.test(id);
 
 app.post('/api/activities', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'ファイルがありません' });
-    // multer delivers originalname as latin1; recover UTF-8 (Japanese file names).
+    // multerはoriginalnameをlatin1で渡してくるので、UTF-8に復元する（日本語ファイル名対策）。
     const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
     const data = await parseFitBuffer(req.file.buffer);
     const summary = buildSummary(originalName, data, req.file.buffer);
@@ -135,9 +135,9 @@ app.put('/api/activities/:id/shoe', (req, res) => {
 });
 
 /**
- * Estimated LT1 / LT2 / FTP per sport, from the mean-maximal curves of every
- * stored activity in the window (?days=N, omitted or 0 = all time).
- * Missing curves are computed on demand and cached.
+ * 保存済みアクティビティの平均最大カーブから、スポーツ別に LT1 / LT2 / FTP を
+ * 推定して返す。期間は ?days=N で指定（省略または0なら全期間）。
+ * キャッシュが無いカーブはこのタイミングで計算して保存する。
  */
 app.get('/api/thresholds', async (req, res) => {
   try {
@@ -212,7 +212,7 @@ app.get('/api/thresholds', async (req, res) => {
   }
 });
 
-// Per-shoe aggregates: run count, total running distance, last used date.
+// シューズ別の集計: ラン回数・ラン合計距離・最終使用日。
 app.get('/api/shoes', (_req, res) => {
   const shoeMap = getShoeMap();
   const stats = new Map();
@@ -281,8 +281,8 @@ app.delete('/api/activities/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// Static app (production / container). In dev, Vite serves the app and
-// proxies /api here, so this is a no-op when dist doesn't exist.
+// 静的アプリの配信（本番・コンテナ用）。開発時はViteがアプリを配信して /api を
+// ここへプロキシするので、distが無ければ何もしない。
 if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR));
   app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(DIST_DIR, 'index.html')));

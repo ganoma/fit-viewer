@@ -1,19 +1,20 @@
-// Mean-maximal curves: for each duration, the best rolling average a
-// session achieved. These per-activity curves are cached in SQLite and
-// combined later to estimate CP/FTP/LT1/LT2.
+// 平均最大カーブ（Mean-maximal curve）の抽出。
+// 各時間幅について「その時間だけ続けられた最高の平均値」を求める。
+// アクティビティ単位で算出した結果をSQLiteにキャッシュしておき、
+// あとで全期間分をまとめて CP/FTP/LT1/LT2 の推定に使う。
 
-/** Durations (seconds) sampled on the curve — log-ish spacing. */
+/** カーブをサンプリングする時間幅（秒）。対数に近い間隔で並べている。 */
 export const DURATIONS = [
   5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 420, 600, 900, 1200, 1800, 2400, 3600, 5400,
 ];
 
-/** Records more than this far apart count as a pause and split the segment. */
+/** これ以上レコード間隔が空いたら「一時停止」とみなしてセグメントを分割する秒数。 */
 const GAP_SEC = 10;
 
 /**
- * Expand records onto a 1 Hz grid so rolling windows mean real seconds even
- * when the device used smart recording. Returns one array per continuous
- * segment.
+ * レコードを1秒刻みのグリッドに展開する。
+ * スマートレコーディング（可変間隔記録）でも移動平均の窓が実時間の秒数と
+ * 一致するようにするための前処理。連続した区間ごとの配列を返す。
  */
 function toSecondGrid(samples) {
   const segments = [];
@@ -24,7 +25,7 @@ function toSecondGrid(samples) {
       current = { start: t, values: [] };
       segments.push(current);
     } else {
-      // Forward-fill the seconds between the previous sample and this one.
+      // 前のサンプルとの間に空いた秒を、直前の値で埋める。
       const fill = current.values.length ? current.values[current.values.length - 1] : v;
       for (let i = 1; i < t - prevT; i++) current.values.push(fill);
     }
@@ -34,10 +35,11 @@ function toSecondGrid(samples) {
   return segments.filter((s) => s.values.length > 0).map((s) => s.values);
 }
 
-/** Best rolling average over each duration, across all segments. */
+/** 全セグメントを通して、各時間幅での最高の移動平均を求める。 */
 function bestAverages(segments) {
   const best = {};
   for (const values of segments) {
+    // 累積和を先に作っておき、各窓の平均を O(1) で求める。
     const prefix = new Float64Array(values.length + 1);
     for (let i = 0; i < values.length; i++) prefix[i + 1] = prefix[i] + values[i];
     for (const d of DURATIONS) {
@@ -58,8 +60,8 @@ function bestAverages(segments) {
 const epochSec = (ts) => Math.round(+new Date(ts) / 1000);
 
 /**
- * Per-sport mean-maximal curves for one parsed FIT file.
- * Shape: { cycling: { power: {60: 320, ...}, speed: {...}, hr: {...} }, ... }
+ * パース済みFIT 1件分から、スポーツ別の平均最大カーブを作る。
+ * 戻り値の形: { cycling: { power: {60: 320, ...}, speed: {...}, hr: {...} }, ... }
  */
 export function buildCurves(data) {
   const records = (data.records ?? []).filter((r) => r.timestamp);
@@ -70,7 +72,7 @@ export function buildCurves(data) {
     .filter((s) => s.start_time && s.sport && s.sport !== 'transition')
     .sort((a, b) => +new Date(a.start_time) - +new Date(b.start_time));
 
-  // Without session metadata, treat the whole file as one sport.
+  // セッション情報がないファイルは、全体を1つのスポーツとして扱う。
   const windows =
     sessions.length > 0
       ? sessions.map((s) => {
@@ -103,7 +105,8 @@ export function buildCurves(data) {
     if (hr.length >= 30) curves.hr = bestAverages(toSecondGrid(hr));
     if (Object.keys(curves).length === 0) continue;
 
-    // A multisport file can hold several sessions of one sport: keep the best.
+    // マルチスポーツのファイルには同じスポーツのセッションが複数入りうるので、
+    // その場合は時間幅ごとに良いほうの値を残す。
     const prev = out[w.sport];
     if (!prev) {
       out[w.sport] = curves;

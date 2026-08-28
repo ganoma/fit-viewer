@@ -17,11 +17,11 @@ const SPORT_META: Record<string, { title: string; color: string; order: number }
   swimming: { title: '🏊 スイム', color: '#22d3ee', order: 3 },
 };
 
-/** Speed formatted the way each sport is normally read. */
+/** スポーツごとに一般的な読み方で速度を整形する（バイク=km/h、ラン=/km、スイム=/100m）。 */
 function speedLabel(sport: string, kmh: number | undefined): string {
   if (kmh == null || kmh <= 0) return '-';
   if (sport === 'cycling') return `${kmh.toFixed(1)} km/h`;
-  const minPerUnit = sport === 'swimming' ? 6 / kmh : 60 / kmh; // /100m or /km
+  const minPerUnit = sport === 'swimming' ? 6 / kmh : 60 / kmh; // /100m か /km
   let m = Math.floor(minPerUnit);
   let s = Math.round((minPerUnit - m) * 60);
   if (s === 60) {
@@ -56,7 +56,7 @@ function Kpi({
   );
 }
 
-/** Measured mean-maximal curve plus the fitted CP/CS model line. */
+/** 実測の平均最大カーブに、フィットしたCP/CSモデル曲線を重ねた図を作る。 */
 function curveFigure(sport: string, t: SportThresholds) {
   const usePower = t.powerCurve != null && t.cp != null;
   const curve = usePower ? t.powerCurve : t.speedCurve;
@@ -84,8 +84,8 @@ function curveFigure(sport: string, t: SportThresholds) {
   ];
 
   if (critical != null && finite != null) {
-    // Only draw the model over the range it was fitted on — the hyperbola is
-    // not valid for very short efforts and would look wrong there.
+    // モデル曲線はフィットに使った範囲だけ描く。双曲線は短時間の全力走には
+    // 当てはまらないため、そこまで引くと予測しているように誤解される。
     const used = fit?.durationsUsed ?? [];
     const lo = used[0] ?? points[0].d;
     const hi = used[used.length - 1] ?? points[points.length - 1].d;

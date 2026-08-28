@@ -1,19 +1,18 @@
-// Threshold estimation from mean-maximal curves.
+// 平均最大カーブからの閾値推定。
 //
-// Model: the 2-parameter critical power hyperbola  P(t) = W'/t + CP,
-// fitted by least squares on P against 1/t. CP (or critical speed for
-// running) is the classic proxy for the second lactate threshold (LT2 /
-// MLSS); FTP and LT1 are derived from it with the conventional factors
-// documented in THRESHOLD_NOTES below. Everything here is an estimate from
-// field data, not a lab measurement.
+// モデルは2パラメータのクリティカルパワー双曲線  P(t) = W'/t + CP。
+// P を 1/t に対して最小二乗フィットして CP を求める。CP（ランなら
+// クリティカルスピード CS）は第2乳酸閾値（LT2 / MLSS）の代表的な近似で、
+// FTP と LT1 はそこから慣用の係数で導く（係数は下の THRESHOLD_NOTES 参照）。
+// いずれも実走データからの推定値であり、ラボ測定の代替ではない。
 
-const FIT_MIN_SEC = 120; // 2 min — below this the anaerobic contribution dominates
-const FIT_MAX_SEC = 1800; // 30 min — above this pacing/fuelling confound the fit
+const FIT_MIN_SEC = 120; // 2分。これより短いと無酸素性の寄与が大きすぎる
+const FIT_MAX_SEC = 1800; // 30分。これより長いとペース配分や補給の影響が混ざる
 
-/** FTP is conventionally a touch below CP; 20-min tests use the 95% rule. */
+/** FTPは慣例的にCPよりわずかに低い。20分テスト法も95%ルールを使う。 */
 const FTP_FROM_CP = 0.95;
 const FTP_FROM_20MIN = 0.95;
-/** LT1 (aerobic threshold) as a fraction of threshold intensity. */
+/** LT1（有酸素性作業閾値）を閾値強度に対する割合で表したもの。 */
 const LT1_POWER_RATIO = 0.75;
 const LT1_SPEED_RATIO = 0.8;
 const LT1_HR_RATIO = 0.85;
@@ -25,7 +24,7 @@ export const THRESHOLD_NOTES = {
   lt1: `LT1 ≈ 閾値パワーの${LT1_POWER_RATIO * 100}% / 閾値速度の${LT1_SPEED_RATIO * 100}% / LTHRの${LT1_HR_RATIO * 100}%（経験則）`,
 };
 
-/** Least-squares fit of y = a*x + b over the given points. */
+/** y = a*x + b の最小二乗フィット。決定係数 R² も返す。 */
 function linearFit(points) {
   const n = points.length;
   const sx = points.reduce((s, p) => s + p.x, 0);
@@ -44,9 +43,9 @@ function linearFit(points) {
 }
 
 /**
- * Fit the critical-power hyperbola to a {duration: best} curve.
- * `critical` is in the curve's own unit; `slope` is the finite work capacity
- * in unit·seconds (W·s = joules for power, km/h·s for speed).
+ * {時間幅: ベスト値} のカーブにクリティカルパワー双曲線をフィットする。
+ * critical はカーブと同じ単位、slope は有限の仕事容量で単位は「単位×秒」
+ * （パワーなら W·s = ジュール、速度なら km/h·s）。
  */
 function fitCriticalModel(curve) {
   const points = Object.entries(curve ?? {})
@@ -64,7 +63,7 @@ function fitCriticalModel(curve) {
   };
 }
 
-/** Best sustained HR over 20–30 min, falling back to shorter windows. */
+/** 20〜30分で維持できた最高平均心拍をLTHRとする。無ければ短い窓に落とす。 */
 function estimateLthr(hrCurve) {
   if (!hrCurve) return null;
   for (const windows of [[1800, 1200], [900, 600], [300]]) {
@@ -78,7 +77,7 @@ function estimateLthr(hrCurve) {
 
 const round1 = (v) => (v == null ? null : Math.round(v * 10) / 10);
 
-/** km/h -> "m:ss" per km. Kept for reference; the client formats per sport. */
+/** km/h を 1kmあたりの "m:ss" に変換。表示はクライアント側でスポーツ別に行う。 */
 export function paceFromKmh(kmh) {
   if (!kmh || kmh <= 0) return null;
   const total = 60 / kmh;
@@ -91,7 +90,7 @@ export function paceFromKmh(kmh) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** Merge per-activity curves into one best-of curve. */
+/** アクティビティごとのカーブを、時間幅ごとのベストで1本にまとめる。 */
 function mergeCurves(curveList, key) {
   const merged = {};
   for (const curves of curveList) {
@@ -105,8 +104,8 @@ function mergeCurves(curveList, key) {
 }
 
 /**
- * Estimate thresholds for one sport from its per-activity curves.
- * `curveList` is an array of { power?, speed?, hr? } objects.
+ * 1スポーツ分のカーブ群から閾値を推定する。
+ * curveList は { power?, speed?, hr? } の配列（アクティビティごと）。
  */
 export function estimateThresholds(sport, curveList) {
   const powerCurve = mergeCurves(curveList, 'power');
@@ -128,10 +127,10 @@ export function estimateThresholds(sport, curveList) {
     cs: null,
   };
 
-  // --- Power side (cycling, and running power if present) ---
+  // --- パワー側（バイク、およびランパワーがある場合） ---
   const cp = fitCriticalModel(powerCurve);
   if (cp) {
-    // slope is W·s, i.e. joules of anaerobic work capacity.
+    // slope は W·s、すなわち無酸素性の仕事容量 W'（ジュール）。
     result.cp = { value: round1(cp.critical), wPrimeJ: Math.round(cp.slope), r2: cp.r2, durationsUsed: cp.durationsUsed };
     const best20 = powerCurve?.[1200];
     const ftpValue = best20 != null ? best20 * FTP_FROM_20MIN : cp.critical * FTP_FROM_CP;
@@ -144,10 +143,10 @@ export function estimateThresholds(sport, curveList) {
     result.lt1.power = Math.round(result.ftp.value * LT1_POWER_RATIO);
   }
 
-  // --- Speed side (running / swimming) ---
+  // --- 速度側（ラン・スイム） ---
   const cs = fitCriticalModel(speedCurve);
   if (cs) {
-    // slope is (km/h)·s; divide by 3.6 for D' in metres.
+    // slope の単位は (km/h)·s。3.6で割るとD'（メートル）になる。
     result.cs = {
       valueKmh: round1(cs.critical),
       dPrimeM: Math.round(cs.slope / 3.6),
@@ -158,7 +157,7 @@ export function estimateThresholds(sport, curveList) {
     result.lt1.speedKmh = round1(cs.critical * LT1_SPEED_RATIO);
   }
 
-  // --- Heart rate side ---
+  // --- 心拍側 ---
   if (lthr) {
     result.lt2.hr = lthr.value;
     result.lt1.hr = Math.round(lthr.value * LT1_HR_RATIO);
@@ -168,7 +167,7 @@ export function estimateThresholds(sport, curveList) {
   return hasAny ? result : null;
 }
 
-/** Coggan-style power zones anchored on FTP. */
+/** FTPを基準にしたパワーゾーン（Cogganベース）。 */
 export function powerZones(ftp) {
   if (!ftp) return null;
   const z = (lo, hi) => ({ from: Math.round(ftp * lo), to: hi == null ? null : Math.round(ftp * hi) });
@@ -182,7 +181,7 @@ export function powerZones(ftp) {
   ];
 }
 
-/** HR zones anchored on LTHR (Friel-style). */
+/** LTHRを基準にした心拍ゾーン（Frielベース）。 */
 export function hrZones(lthr) {
   if (!lthr) return null;
   const z = (lo, hi) => ({ from: Math.round(lthr * lo), to: hi == null ? null : Math.round(lthr * hi) });

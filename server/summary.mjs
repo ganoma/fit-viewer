@@ -1,6 +1,6 @@
-// Server-side FIT parsing: extracts a compact per-sport summary used by the
-// trends page. The raw file is kept alongside, so anything not summarized
-// here can still be re-parsed by the client viewer.
+// サーバー側でのFITパース。傾向分析ページが使うスポーツ別の要約だけを
+// コンパクトに取り出す。fit原本は別途そのまま保存しているので、ここに
+// 含めなかった項目はクライアント側で再パースすれば取得できる。
 import crypto from 'node:crypto';
 import FitParser from 'fit-file-parser';
 
