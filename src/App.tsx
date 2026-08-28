@@ -6,9 +6,10 @@ import { dateBasedName, extractSingleFit, isZipFile } from './zip';
 import ActivityView from './ActivityView';
 import TrendsView from './TrendsView';
 import HomeView from './HomeView';
+import ThresholdsView from './ThresholdsView';
 import './App.css';
 
-export type Tab = 'home' | 'activity' | 'trends';
+export type Tab = 'home' | 'activity' | 'trends' | 'thresholds';
 
 interface Route {
   tab: Tab;
@@ -26,6 +27,7 @@ const TREND_SPORTS = ['running', 'cycling', 'swimming'];
 function parseHash(): Route {
   const segments = window.location.hash.replace(/^#\/?/, '').split('/');
   if (segments[0] === 'activity') return { tab: 'activity', sport: null };
+  if (segments[0] === 'thresholds') return { tab: 'thresholds', sport: null };
   if (segments[0] === 'trends') {
     const sport = TREND_SPORTS.includes(segments[1]) ? segments[1] : null;
     return { tab: 'trends', sport };
@@ -35,7 +37,15 @@ function parseHash(): Route {
 
 function navigate(tab: Tab, sport: string | null = null) {
   window.location.hash =
-    tab === 'home' ? '/' : tab === 'activity' ? '/activity' : sport ? `/trends/${sport}` : '/trends';
+    tab === 'home'
+      ? '/'
+      : tab === 'activity'
+        ? '/activity'
+        : tab === 'thresholds'
+          ? '/thresholds'
+          : sport
+            ? `/trends/${sport}`
+            : '/trends';
 }
 
 export default function App() {
@@ -142,6 +152,12 @@ export default function App() {
         >
           📈 傾向分析
         </button>
+        <button
+          className={`tab ${tab === 'thresholds' ? 'active' : ''}`}
+          onClick={() => navigate('thresholds')}
+        >
+          ⚡ 閾値
+        </button>
       </nav>
 
       {tab === 'home' && (
@@ -163,6 +179,7 @@ export default function App() {
           onNoteSaved={() => setSavedVersion((v) => v + 1)}
         />
       )}
+      {tab === 'thresholds' && <ThresholdsView savedVersion={savedVersion} />}
       {tab === 'trends' && (
         <TrendsView
           savedVersion={savedVersion}
