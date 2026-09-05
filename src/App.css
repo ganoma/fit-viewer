@@ -915,3 +915,15 @@ td {
 .pw-actions .login-button {
   flex: 1;
 }
+
+/* グラフの差し替え時にカードの高さが変わらないようにする枠 */
+.chart-slot {
+  min-height: 460px;
+}
+
+/* 未選択メッセージも枠と同じ高さに収め、切り替えで高さが動かないようにする */
+.chart-slot > .status {
+  margin: 0;
+  padding: 210px 0;
+  text-align: center;
+}
