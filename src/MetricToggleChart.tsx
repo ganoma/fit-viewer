@@ -54,11 +54,14 @@ export default function MetricToggleChart({
           );
         })}
       </div>
-      {figure ? (
-        <Plot figure={figure} />
-      ) : (
-        <p className="status">表示する項目をチェックしてください。</p>
-      )}
+      {/* 図の有無で高さが変わるとスクロール位置がずれるので、枠の高さを固定する */}
+      <div className="chart-slot">
+        {figure ? (
+          <Plot figure={figure} />
+        ) : (
+          <p className="status">表示する項目をチェックしてください。</p>
+        )}
+      </div>
     </div>
   );
 }
