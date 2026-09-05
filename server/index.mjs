@@ -9,6 +9,23 @@ import multer from 'multer';
 import { buildSummary, parseFitBuffer } from './summary.mjs';
 import { buildCurves } from './curves.mjs';
 import { estimateThresholds, hrZones, powerZones, THRESHOLD_NOTES } from './thresholds.mjs';
+import {
+  COOKIE_NAME,
+  checkRateLimit,
+  clearFailures,
+  createSession,
+  deleteAllSessions,
+  deleteSession,
+  initAuthTables,
+  isConfigured,
+  isValidSession,
+  readCookie,
+  recordFailure,
+  requireAuth,
+  sessionCookie,
+  setPassword,
+  verifyPassword,
+} from './auth.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname, '..', 'data');
@@ -36,6 +53,8 @@ db.exec(`
     curves_json TEXT NOT NULL
   )
 `);
+
+initAuthTables(db);
 
 async function computeCurvesFor(id, startTime) {
   const data = await parseFitBuffer(fs.readFileSync(fitPath(id)));
@@ -69,6 +88,79 @@ const fitPath = (id) => path.join(DATA_DIR, `${id}.fit`);
 // サマリーとまとめて読み込めるようにするため。
 const notePath = (id) => path.join(DATA_DIR, `${id}.note.md`);
 const validId = (id) => /^[0-9a-f]{16}$/.test(id);
+
+// --- 認証 ---
+// ここから下のAPIはすべてログインが必要。/api/auth/* だけは例外。
+
+app.get('/api/auth/status', (req, res) => {
+  res.json({
+    configured: isConfigured(db),
+    authenticated: isValidSession(db, readCookie(req, COOKIE_NAME)),
+  });
+});
+
+/** 初回セットアップ。パスワード未設定のときだけ受け付ける。 */
+app.post('/api/auth/setup', (req, res) => {
+  if (isConfigured(db)) {
+    return res.status(409).json({ error: 'すでにパスワードが設定されています' });
+  }
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'パスワードは8文字以上にしてください' });
+  }
+  setPassword(db, password);
+  const { token, expires } = createSession(db);
+  res.setHeader('Set-Cookie', sessionCookie(token, expires));
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const ip = req.ip ?? 'unknown';
+  const limit = checkRateLimit(ip);
+  if (limit.blocked) {
+    return res
+      .status(429)
+      .json({ error: `試行回数が多すぎます。${limit.retryAfterSec}秒後にお試しください` });
+  }
+  if (!isConfigured(db)) {
+    return res.status(409).json({ error: 'setup_required' });
+  }
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  if (!verifyPassword(db, password)) {
+    recordFailure(ip);
+    return res.status(401).json({ error: 'パスワードが違います' });
+  }
+  clearFailures(ip);
+  const { token, expires } = createSession(db);
+  res.setHeader('Set-Cookie', sessionCookie(token, expires));
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  deleteSession(db, readCookie(req, COOKIE_NAME));
+  res.setHeader('Set-Cookie', sessionCookie('', null));
+  res.json({ ok: true });
+});
+
+/** パスワード変更。既存セッションはすべて無効化する。 */
+app.post('/api/auth/change-password', requireAuth(db), (req, res) => {
+  const current = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+  const next = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+  if (!verifyPassword(db, current)) {
+    return res.status(401).json({ error: '現在のパスワードが違います' });
+  }
+  if (next.length < 8) {
+    return res.status(400).json({ error: 'パスワードは8文字以上にしてください' });
+  }
+  setPassword(db, next);
+  deleteAllSessions(db);
+  const { token, expires } = createSession(db);
+  res.setHeader('Set-Cookie', sessionCookie(token, expires));
+  res.json({ ok: true });
+});
+
+// これ以降の /api/* は認証必須。
+app.use('/api', requireAuth(db));
 
 app.post('/api/activities', upload.single('file'), async (req, res) => {
   try {

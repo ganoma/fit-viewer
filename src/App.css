@@ -761,3 +761,157 @@ td {
 .threshold-notes strong {
   color: #cbd5e1;
 }
+
+/* ---- ログイン・認証 ---- */
+
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid #334155;
+  border-radius: 20px;
+  padding: 36px 30px;
+}
+
+.login-title {
+  margin: 0;
+  font-size: 1.5rem;
+  text-align: center;
+}
+
+.login-sub {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.login-input {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 11px 14px;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.login-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.login-error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #f87171;
+}
+
+.login-button {
+  margin-top: 6px;
+  background: #3b82f6;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 12px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.login-button:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.login-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logout-button {
+  background: none;
+  border: 1px solid #475569;
+  border-radius: 9999px;
+  color: #94a3b8;
+  font-family: inherit;
+  font-size: 0.82rem;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.logout-button:hover {
+  color: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.pw-toggle {
+  margin: 20px 0 0;
+  text-align: right;
+}
+
+.pw-link {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+
+.pw-link:hover {
+  color: #94a3b8;
+  text-decoration: underline;
+}
+
+.pw-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+  margin-top: 20px;
+}
+
+.pw-status {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.pw-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pw-actions .login-button {
+  flex: 1;
+}

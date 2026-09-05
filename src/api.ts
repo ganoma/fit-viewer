@@ -25,8 +25,15 @@ export interface ActivitySummary {
   shoe?: string | null;
 }
 
+/** セッション切れを検知したときに App 側へ知らせるためのイベント名。 */
+export const UNAUTHORIZED_EVENT = 'fv:unauthorized';
+
 async function toJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    // 認証系API以外で401が返ったら、セッション切れとみなして再ログインを促す。
+    if (res.status === 401 && !res.url.includes('/api/auth/')) {
+      window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
+    }
     let message = `HTTP ${res.status}`;
     try {
       const body = await res.json();
@@ -132,4 +139,53 @@ export interface ThresholdsResponse {
 
 export async function getThresholds(days: number): Promise<ThresholdsResponse> {
   return toJson(await fetch(`/api/thresholds?days=${days}`));
+}
+
+// --- 認証 ---
+
+export interface AuthStatus {
+  configured: boolean;
+  authenticated: boolean;
+}
+
+export async function getAuthStatus(): Promise<AuthStatus> {
+  return toJson(await fetch('/api/auth/status'));
+}
+
+/** 初回セットアップ。パスワードは呼び出し元（ログイン画面）から渡される。 */
+export async function setupPassword(password: string): Promise<void> {
+  await toJson(
+    await fetch('/api/auth/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }),
+  );
+}
+
+export async function login(password: string): Promise<void> {
+  await toJson(
+    await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }),
+  );
+}
+
+export async function logout(): Promise<void> {
+  await toJson(await fetch('/api/auth/logout', { method: 'POST' }));
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await toJson(
+    await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+  );
 }
