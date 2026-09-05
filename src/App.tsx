@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ParsedFit } from './fit';
 import { parseFitFile } from './fit';
-import { uploadActivity } from './api';
+import { UNAUTHORIZED_EVENT, getAuthStatus, logout, uploadActivity } from './api';
 import { dateBasedName, extractSingleFit, isZipFile } from './zip';
 import ActivityView from './ActivityView';
 import TrendsView from './TrendsView';
 import HomeView from './HomeView';
 import ThresholdsView from './ThresholdsView';
+import LoginView from './LoginView';
+import ChangePasswordCard from './ChangePasswordCard';
 import './App.css';
 
 export type Tab = 'home' | 'activity' | 'trends' | 'thresholds';
@@ -58,6 +60,26 @@ export default function App() {
   const [currentActivityId, setCurrentActivityId] = useState<string | null>(null);
   // Bumped whenever the server-side activity list may have changed.
   const [savedVersion, setSavedVersion] = useState(0);
+  // 認証状態。null は問い合わせ中（画面を出さずに待つ）。
+  const [auth, setAuth] = useState<{ configured: boolean; authenticated: boolean } | null>(null);
+
+  const refreshAuth = useCallback(() => {
+    getAuthStatus()
+      .then(setAuth)
+      // サーバーに繋がらない場合は認証なしで見られる状態にしておく（開発時など）。
+      .catch(() => setAuth({ configured: false, authenticated: true }));
+  }, []);
+
+  useEffect(() => {
+    refreshAuth();
+  }, [refreshAuth]);
+
+  // セッション切れ（他APIが401を返した）ときはログイン画面に戻す。
+  useEffect(() => {
+    const onUnauthorized = () => setAuth({ configured: true, authenticated: false });
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
 
   useEffect(() => {
     const onHashChange = () => setRoute(parseHash());
@@ -109,6 +131,18 @@ export default function App() {
     }
   }, []);
 
+  if (auth == null) {
+    return <div className="container" />;
+  }
+  if (!auth.authenticated) {
+    return (
+      <LoginView
+        configured={auth.configured}
+        onAuthenticated={() => setAuth({ configured: true, authenticated: true })}
+      />
+    );
+  }
+
   return (
     <div className="container">
       <header>
@@ -116,21 +150,32 @@ export default function App() {
           <h1>🏁 FIT File Viewer</h1>
           <p className="subtitle">.fit ファイルの解析・保存・傾向分析</p>
         </div>
-        {tab === 'activity' && (
-          <label className="file-button">
-            FITファイルを選択
-            <input
-              type="file"
-              accept=".fit,.zip"
-              hidden
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFile(file);
-                e.target.value = '';
-              }}
-            />
-          </label>
-        )}
+        <div className="header-actions">
+          {tab === 'activity' && (
+            <label className="file-button">
+              FITファイルを選択
+              <input
+                type="file"
+                accept=".fit,.zip"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFile(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
+          <button
+            className="logout-button"
+            onClick={async () => {
+              await logout().catch(() => {});
+              setAuth({ configured: true, authenticated: false });
+            }}
+          >
+            ログアウト
+          </button>
+        </div>
       </header>
 
       <nav className="tabs">
@@ -161,10 +206,13 @@ export default function App() {
       </nav>
 
       {tab === 'home' && (
-        <HomeView
-          onNavigate={(t) => navigate(t)}
-          onOpenSportTrends={(s) => navigate('trends', s)}
-        />
+        <>
+          <HomeView
+            onNavigate={(t) => navigate(t)}
+            onOpenSportTrends={(s) => navigate('trends', s)}
+          />
+          <ChangePasswordCard />
+        </>
       )}
       {tab === 'activity' && (
         <ActivityView
