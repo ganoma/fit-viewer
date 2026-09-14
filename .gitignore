@@ -25,3 +25,6 @@ dist-ssr
 
 # uploaded activity data (local dev)
 data
+
+# Claude Code のローカル権限設定（環境固有のパスを含むため共有しない）
+.claude/settings.local.json
