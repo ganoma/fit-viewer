@@ -25,6 +25,16 @@ export interface ActivitySummary {
   shoe?: string | null;
 }
 
+/** 日記つきアクティビティ（GET /api/notes の1件）。本文と、一覧に出す指標を含む。 */
+export interface DiaryEntry {
+  id: string;
+  fileName: string;
+  /** UTC の ISO 文字列。表示・検索用の YYYY-MM-DD 変換は diarySearch.dateKey が行う。 */
+  startTime: string | null;
+  sports: SportSummary[];
+  note: string;
+}
+
 /** セッション切れを検知したときに App 側へ知らせるためのイベント名。 */
 export const UNAUTHORIZED_EVENT = 'fv:unauthorized';
 
@@ -50,13 +60,17 @@ export async function listActivities(): Promise<ActivitySummary[]> {
   return toJson(await fetch('/api/activities'));
 }
 
+export async function listNotes(): Promise<DiaryEntry[]> {
+  return toJson(await fetch('/api/notes'));
+}
+
 export async function uploadActivity(file: File): Promise<ActivitySummary> {
   const form = new FormData();
   form.append('file', file);
   return toJson(await fetch('/api/activities', { method: 'POST', body: form }));
 }
 
-export async function fetchActivityFile(activity: ActivitySummary): Promise<File> {
+export async function fetchActivityFile(activity: { id: string; fileName: string }): Promise<File> {
   const res = await fetch(`/api/activities/${activity.id}/fit`);
   if (!res.ok) throw new Error(`保存ファイルの取得に失敗しました (HTTP ${res.status})`);
   return new File([await res.arrayBuffer()], activity.fileName);

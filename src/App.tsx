@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ParsedFit } from './fit';
 import { parseFitFile } from './fit';
-import { UNAUTHORIZED_EVENT, getAuthStatus, logout, uploadActivity } from './api';
+import { UNAUTHORIZED_EVENT, fetchActivityFile, getAuthStatus, logout, uploadActivity } from './api';
 import { dateBasedName, extractSingleFit, isZipFile } from './zip';
 import ActivityView from './ActivityView';
 import TrendsView from './TrendsView';
 import HomeView from './HomeView';
 import ThresholdsView from './ThresholdsView';
+import DiaryListView from './DiaryListView';
 import LoginView from './LoginView';
 import ChangePasswordCard from './ChangePasswordCard';
 import './App.css';
 
-export type Tab = 'home' | 'activity' | 'trends' | 'thresholds';
+export type Tab = 'home' | 'activity' | 'trends' | 'thresholds' | 'diary';
 
 interface Route {
   tab: Tab;
@@ -26,10 +27,12 @@ const TREND_SPORTS = ['running', 'cycling', 'swimming'];
 //   #/activity  -> activity viewer
 //   #/trends    -> trends (all sports)
 //   #/trends/<sport> -> trends filtered to one sport
+//   #/diary     -> 日記一覧
 function parseHash(): Route {
   const segments = window.location.hash.replace(/^#\/?/, '').split('/');
   if (segments[0] === 'activity') return { tab: 'activity', sport: null };
   if (segments[0] === 'thresholds') return { tab: 'thresholds', sport: null };
+  if (segments[0] === 'diary') return { tab: 'diary', sport: null };
   if (segments[0] === 'trends') {
     const sport = TREND_SPORTS.includes(segments[1]) ? segments[1] : null;
     return { tab: 'trends', sport };
@@ -37,17 +40,24 @@ function parseHash(): Route {
   return { tab: 'home', sport: null };
 }
 
+// parseHash と対になるよう、入れ子三項をやめて分岐を並べる（出力は従来と同一）。
+function hashFor(tab: Tab, sport: string | null): string {
+  switch (tab) {
+    case 'activity':
+      return '/activity';
+    case 'thresholds':
+      return '/thresholds';
+    case 'diary':
+      return '/diary';
+    case 'trends':
+      return sport ? `/trends/${sport}` : '/trends';
+    default:
+      return '/';
+  }
+}
+
 function navigate(tab: Tab, sport: string | null = null) {
-  window.location.hash =
-    tab === 'home'
-      ? '/'
-      : tab === 'activity'
-        ? '/activity'
-        : tab === 'thresholds'
-          ? '/thresholds'
-          : sport
-            ? `/trends/${sport}`
-            : '/trends';
+  window.location.hash = hashFor(tab, sport);
 }
 
 export default function App() {
@@ -131,6 +141,19 @@ export default function App() {
     }
   }, []);
 
+  // 日記一覧から該当アクティビティを開く。保存済み一覧のクリックと同じ経路（取得 -> 再解析 -> 再アップロード）を通る。
+  const openStoredActivity = useCallback(
+    async (entry: { id: string; fileName: string }) => {
+      navigate('activity'); // 先に遷移して「⏳ 解析中…」を見せる
+      try {
+        await handleFile(await fetchActivityFile(entry));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [handleFile],
+  );
+
   if (auth == null) {
     return <div className="container" />;
   }
@@ -203,6 +226,12 @@ export default function App() {
         >
           ⚡ 閾値
         </button>
+        <button
+          className={`tab ${tab === 'diary' ? 'active' : ''}`}
+          onClick={() => navigate('diary')}
+        >
+          📝 日記
+        </button>
       </nav>
 
       {tab === 'home' && (
@@ -234,6 +263,9 @@ export default function App() {
           sport={sport}
           onSportChange={(s) => navigate('trends', s)}
         />
+      )}
+      {tab === 'diary' && (
+        <DiaryListView savedVersion={savedVersion} onOpenActivity={openStoredActivity} />
       )}
     </div>
   );
