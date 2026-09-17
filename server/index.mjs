@@ -75,6 +75,21 @@ const getShoeMap = () => {
   return map;
 };
 
+/** 保存済みサマリー（<id>.json）をまとめて読む。壊れたJSONは黙って捨てる。 */
+function readSummaries() {
+  return fs
+    .readdirSync(DATA_DIR)
+    .filter((f) => f.endsWith('.json'))
+    .map((f) => {
+      try {
+        return JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf-8'));
+      } catch {
+        return null;
+      }
+    })
+    .filter((s) => s != null);
+}
+
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 const upload = multer({
@@ -189,17 +204,7 @@ app.post('/api/activities', upload.single('file'), async (req, res) => {
 
 app.get('/api/activities', (_req, res) => {
   const shoeMap = getShoeMap();
-  const summaries = fs
-    .readdirSync(DATA_DIR)
-    .filter((f) => f.endsWith('.json'))
-    .map((f) => {
-      try {
-        return JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf-8'));
-      } catch {
-        return null;
-      }
-    })
-    .filter((s) => s != null)
+  const summaries = readSummaries()
     .map((s) => ({
       ...s,
       hasNote: fs.existsSync(notePath(s.id)),
@@ -236,17 +241,8 @@ app.get('/api/thresholds', async (req, res) => {
     const days = Number(req.query.days) || 0;
     const cutoff = days > 0 ? new Date(Date.now() - days * 86400_000).toISOString() : null;
 
-    const summaries = fs
-      .readdirSync(DATA_DIR)
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => {
-        try {
-          return JSON.parse(fs.readFileSync(path.join(DATA_DIR, f), 'utf-8'));
-        } catch {
-          return null;
-        }
-      })
-      .filter((s) => s != null && fs.existsSync(fitPath(s.id)))
+    const summaries = readSummaries()
+      .filter((s) => fs.existsSync(fitPath(s.id)))
       .filter((s) => cutoff == null || (s.startTime ?? '') >= cutoff);
 
     const cached = new Map(
@@ -330,6 +326,37 @@ app.get('/api/shoes', (_req, res) => {
   const list = [...stats.values()]
     .map((s) => ({ ...s, totalKm: Math.round(s.totalKm * 10) / 10 }))
     .sort((a, b) => b.totalKm - a.totalKm);
+  res.json(list);
+});
+
+/**
+ * 日記（<id>.note.md）があるアクティビティだけを、本文込みで日付の新しい順に返す。
+ * 日記一覧画面が1リクエストで全件を受け取るための専用経路。
+ * GET /api/activities は既存3画面が使っていて本文を必要としないので相乗りさせない。
+ * 日付の YYYY-MM-DD 化はクライアント側で行う（コンテナのタイムゾーンはUTCのため）。
+ */
+app.get('/api/notes', (_req, res) => {
+  const list = readSummaries()
+    .map((s) => {
+      if (!fs.existsSync(notePath(s.id))) return null;
+      let note;
+      try {
+        note = fs.readFileSync(notePath(s.id), 'utf-8');
+      } catch {
+        return null;
+      }
+      // 本文が空のファイルが残っていた場合の保険（PUT は空なら削除する仕様）。
+      if (note.trim() === '') return null;
+      return {
+        id: s.id,
+        fileName: s.fileName,
+        startTime: s.startTime ?? null,
+        sports: s.sports ?? [],
+        note,
+      };
+    })
+    .filter((e) => e != null)
+    .sort((a, b) => (b.startTime ?? '').localeCompare(a.startTime ?? ''));
   res.json(list);
 });
 

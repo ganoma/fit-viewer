@@ -927,3 +927,159 @@ td {
   padding: 210px 0;
   text-align: center;
 }
+
+/* ---- Diary list ---- */
+
+.diary-search {
+  padding: 14px 16px;
+}
+
+.diary-search-input {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #334155;
+  border-radius: 9999px;
+  color: #e2e8f0;
+  font-family: inherit;
+  font-size: 0.9rem;
+  padding: 9px 18px;
+}
+
+.diary-search-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.diary-search-input::placeholder {
+  color: #475569;
+}
+
+.diary-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.diary-entry-date {
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.diary-entry-sports {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.diary-entry-sport {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.diary-entry-open {
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fff;
+  background: #3b82f6;
+  border: none;
+  border-radius: 9999px;
+  padding: 8px 22px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-left: auto;
+}
+
+.diary-entry-open:hover {
+  background: #2563eb;
+}
+
+.diary-body {
+  line-height: 1.8;
+  color: #e2e8f0;
+}
+
+.diary-body h1,
+.diary-body h2,
+.diary-body h3,
+.diary-body h4 {
+  margin: 18px 0 8px;
+  color: #f1f5f9;
+}
+
+.diary-body h1 {
+  font-size: 1.4rem;
+}
+
+.diary-body h2 {
+  font-size: 1.25rem;
+}
+
+.diary-body h3 {
+  font-size: 1.1rem;
+}
+
+.diary-body h4 {
+  font-size: 1rem;
+}
+
+.diary-body ul,
+.diary-body ol {
+  padding-left: 1.4em;
+  margin: 8px 0;
+}
+
+.diary-body blockquote {
+  border-left: 3px solid #475569;
+  margin-left: 0;
+  padding-left: 14px;
+  color: #94a3b8;
+}
+
+.diary-body code {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+
+.diary-body pre {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+
+.diary-body pre code {
+  background: none;
+  padding: 0;
+}
+
+.diary-body hr {
+  border: none;
+  border-top: 1px solid #334155;
+  margin: 16px 0;
+}
+
+.diary-body a {
+  color: #60a5fa;
+}
+
+.diary-body ul.contains-task-list {
+  list-style: none;
+  padding-left: 0.4em;
+}
+
+.diary-body li.task-list-item {
+  list-style: none;
+}
+
+.diary-hit {
+  background: rgba(250, 204, 21, 0.3);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
