@@ -1083,3 +1083,12 @@ td {
   border-radius: 3px;
   padding: 0 1px;
 }
+
+/* 月間距離の表。月数が増えても縦に伸びすぎないようスクロールさせる */
+.monthly-table {
+  margin-top: 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #475569 transparent;
+}

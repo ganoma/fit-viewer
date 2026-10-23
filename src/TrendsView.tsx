@@ -3,6 +3,7 @@ import type { ActivitySummary, ShoeStats, SportSummary } from './api';
 import { listActivities, listShoes } from './api';
 import { extractTrendMetrics } from './charts';
 import MetricToggleChart from './MetricToggleChart';
+import MonthlyDistanceCard from './MonthlyDistanceCard';
 
 const SPORT_SECTIONS: { sport: string; title: string; label: string; defaults: string[] }[] = [
   { sport: 'running', title: '🏃 ラン傾向', label: '🏃 ラン', defaults: ['hr', 'stride'] },
@@ -98,6 +99,8 @@ export default function TrendsView({
           </label>
         ))}
       </div>
+
+      <MonthlyDistanceCard activities={activities} sport={sport} />
 
       {(() => {
         const rendered = visibleSections
