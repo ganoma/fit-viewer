@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ParsedFit } from './fit';
-import { fmtDuration } from './fit';
+import type { Segment } from './fit';
+import { fmtDuration, pace100Str, paceStr } from './fit';
 import { buildMapFigure } from './charts';
 import type { ActivitySummary } from './api';
 import { deleteActivity, fetchActivityFile, listActivities } from './api';
@@ -15,6 +16,21 @@ const SPORT_EMOJI: Record<string, string> = {
   swimming: '🏊',
   cycling: '🚴',
   running: '🏃',
+};
+
+/** セッションの平均速度（km/h）。記録が無ければ距離÷時間で求め、それも無理なら null。 */
+function avgSpeedKmh(seg: Segment): number | null {
+  const { enhanced_avg_speed, total_distance, total_timer_time } = seg.session;
+  if (enhanced_avg_speed != null && enhanced_avg_speed > 0) return enhanced_avg_speed;
+  if (total_distance && total_timer_time) return (total_distance / total_timer_time) * 3.6;
+  return null;
+}
+
+/** 平均ペース列の書式。ここに無い種目（トランジションなど）は「-」になる。 */
+const PACE_FORMAT: Record<string, (kmh: number) => string> = {
+  running: (kmh) => `${paceStr(kmh)} /km`,
+  swimming: (kmh) => `${pace100Str(kmh)} /100m`,
+  cycling: (kmh) => `${kmh.toFixed(1)} km/h`,
 };
 
 export default function ActivityView({
@@ -207,10 +223,23 @@ export default function ActivityView({
             // Show only columns that at least one segment can fill.
             const cols = [
               {
+                // スイムは距離が短いので m、ほかは km で出す。
                 header: 'Distance',
                 show: segs.some((s) => (s.session.total_distance ?? 0) > 0),
                 cell: (s: (typeof segs)[number]) =>
-                  `${((s.session.total_distance ?? 0) / 1000).toFixed(2)} km`,
+                  s.sport === 'swimming'
+                    ? `${Math.round(s.session.total_distance ?? 0).toLocaleString()} m`
+                    : `${((s.session.total_distance ?? 0) / 1000).toFixed(2)} km`,
+              },
+              {
+                // 種目ごとに普段読む形で出す（ラン=/km、スイム=/100m、バイク=km/h）。
+                header: 'Avg Pace',
+                show: segs.some((s) => avgSpeedKmh(s) != null && s.sport in PACE_FORMAT),
+                cell: (s: (typeof segs)[number]) => {
+                  const kmh = avgSpeedKmh(s);
+                  const format = PACE_FORMAT[s.sport];
+                  return kmh != null && format ? format(kmh) : '-';
+                },
               },
               {
                 header: 'Avg HR',
